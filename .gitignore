@@ -29,6 +29,10 @@ npm-debug.log*
 # Testing
 coverage/
 
+# Multica runtime (per-session)
+.multica/daemon_task_context.json
+.agent_context/
+
 # Misc
 .turbo/
 .cache/
