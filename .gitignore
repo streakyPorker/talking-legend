@@ -34,3 +34,8 @@ coverage/
 .cache/
 tmp/
 temp/
+
+# Agent runtimes (session-specific)
+.omc/
+.agent_context/
+.multica/daemon_task_context.json
