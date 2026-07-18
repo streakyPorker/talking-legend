@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { createGame, performAction } from '../services/game-service.js';
+import { GameService } from '../game/game.service';
 
 describe('GameService', () => {
+  const service = new GameService();
+
   describe('createGame', () => {
     it('should create a new game with valid input', async () => {
-      const result = await createGame({ playerName: 'TestHero' });
+      const result = await service.createGame({ playerName: 'TestHero' });
 
       expect(result.gameId).toBeDefined();
       expect(result.gameId).toMatch(/^[a-f0-9-]{36}$/);
@@ -15,7 +17,7 @@ describe('GameService', () => {
     });
 
     it('should set player in starting village location', async () => {
-      const result = await createGame({ playerName: 'Adventurer' });
+      const result = await service.createGame({ playerName: 'Adventurer' });
       expect(result.initialState.player.location).toBe('village');
       expect(result.initialState.world.currentRegion).toBe('village');
     });
@@ -23,8 +25,8 @@ describe('GameService', () => {
 
   describe('performAction', () => {
     it('should process an action and increment turn', async () => {
-      const { gameId } = await createGame({ playerName: 'TestHero' });
-      const result = await performAction(gameId, {
+      const { gameId } = await service.createGame({ playerName: 'TestHero' });
+      const result = await service.performAction(gameId, {
         gameId,
         action: 'explore',
         target: 'forest',
@@ -37,7 +39,7 @@ describe('GameService', () => {
 
     it('should throw for unknown game ID', async () => {
       await expect(
-        performAction('non-existent-id', {
+        service.performAction('non-existent-id', {
           gameId: 'non-existent-id',
           action: 'look around',
         }),

@@ -1,8 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'crypto';
 
-export function v4(): string {
-  return randomUUID();
-}
-
-// Alias for clarity
-export const uuidv4 = v4;
+export function uuid(): string { return randomUUID(); }
+export const v4 = uuid;
+export const uuidv4 = uuid;
