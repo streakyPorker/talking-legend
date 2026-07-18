@@ -60,50 +60,42 @@ Multica marks the task terminal the moment your top-level turn exits — any bac
 
 ## 上下文
 
-当前项目：LLM-native 解谜对话游戏，前端 React+Zustand+Tailwind + 后端 NestJS，核心玩法由大模型驱动世界演化和 NPC 对话。不涉及战斗系统。
-
-## 核心设计决策（经 Critic 对抗打磨）
-
-| 决策 | 结论 |
-|------|------|
-| LLM 分层 | Opus(GM叙事) / Sonnet(NPC对话) / Haiku(意图分类+事件判断+记忆过滤) |
-| 调用并行 | NPC对话+意图分类可并行；前端双 SSE 连接，分区独立即时展示 |
-| 输入锁定 | GM 生成期间禁用输入框，等 done 事件后解锁 |
-| 持久化 | SQLite 6表 + narrative_log 文件存储 |
-| 事件触发 | 意图路由（intent+entity）替代关键词匹配 |
-| 世界演化 | 确定性世界 tick（时间/天气/NPC情绪漂移）+ haiku 定期过滤可记忆事件 |
-| MVP 区域 | 2 区域（village + forest），支持区域移动 |
-| 对话范围 | 仅同区域 NPC 可对话 |
-| 上下文管理 | 先敲定一版方案，实现后边测边调 |
-| 降级策略 | MVP 不考虑，先跑通核心链路 |
-
-## 需求开发进度
-
-所有设计以 `rfcs/` 下的 RFC 文件为唯一真源。
-
-| RFC | 标题 | 优先级 | 状态 |
-|-----|------|--------|------|
-| 001 | 后端模块化重构 | P0 | ✅ 已完成 |
-| 002 | 数据库设计 | P0 | ⏳ 待编写 |
-| 003 | 世界配置加载系统 | P0 | ⏳ 待编写 |
-| 004 | 上下文管理与Prompt设计 | P1 | ⏳ 待编写 |
-| 005 | LLM接入：GM引擎与SSE | P1 | ⏳ 待编写 |
-| 006 | LLM接入：NPC对话 | P1 | ⏳ 待编写 |
-| 007 | LLM接入：意图分类与事件触发 | P1 | ⏳ 待编写 |
-| 008 | 世界自主演化系统 | P1 | ⏳ 待编写 |
-| 009 | 事件链引擎 | P2 | ⏳ 待编写 |
-| 010 | 前端组件化重构 | P2 | ⏳ 待编写 |
-| 011 | 前端SSE与NPC对话面板 | P2 | ⏳ 待编写 |
-| 012 | 集成测试与验收 | P3 | ⏳ 待编写 |
-
-所有 RFC 我会亲自检阅，未经批准不开始实现。
+当前项目：LLM-native 游戏，前端 React + 后端 TypeScript，核心玩法由大模型驱动世界演化和 NPC 对话
 
 ## Git 纪律
 
-- 每个 RFC 完成后必须保持 git 工作树干净
-- 变更内容提交前由我确认
-- 提交后同步更新所有状态引用（CLAUDE.md 进度表 + RFC 文件状态）
-- 提交包含推送到主干（main）
+以下规则约束所有 git 操作。破坏规则的 commit 会被退回重做。
+
+### 有意义的提交
+
+- **每个 RFC 或功能完成后，必须做有意义的 git commit**
+  - 提交信息必须清晰描述「做了什么」和「为什么做」
+  - 好例子：`feat(db): replace in-memory Map with better-sqlite3 — 8 tables + migration + CRUD repositories`
+  - 差例子：`fix bug`、`update`、`wip`
+- **commit 粒度应支持独立验证**
+  - 一个 commit = 一个可理解、可回滚的变更单元
+  - 每个 commit 对应的变更应能独立运行测试并通过
+  - 禁止将无关联的变更揉进同一个 commit（如 "fix bug + refactor + add feature"）
+
+### 状态同步
+
+- **推送前确保 working tree 干净**：重大/批量更新前必须先 commit 或 stash 所有未跟踪和已修改文件
+- **完成后必须 push 到远端仓库**：避免本地变更丢失或他人无法同步
+- **不要在 main 分支上直接修改已推送的 commit**：需要修正时，在现有 commit 之上追加新的修复 commit
+
+### 提交流程
+
+1. 工作完成后 `git status` 确认范围
+2. 按功能域分组 staging（`git add <files>`）
+3. 撰写规范提交信息，遵循 `<type>(<scope>): <description>` 格式
+4. 运行测试确认无破坏
+5. `git push` 到远端
+
+## Task Initiator
+
+This task was initiated by **架构师**, another agent in this workspace.
+
+Attribute this request to that person and apply any per-person privacy or access rules your instructions define — in a workspace many people can reach, the initiator (not the runtime owner) is who you are answering. Your Multica credentials stay scoped to the runtime owner, so this attribution does not widen what you can read or write — do not assume the initiator can see everything you can.
 
 ## Available Commands
 
@@ -159,23 +151,27 @@ Resources are pointers — open them only when relevant to the task. For `github
 - **What NOT to pin.** No secrets, tokens, or API keys. No logs or comment summaries. No runtime bookkeeping (attempts, run timestamps, agent ids). No single-run details — those belong in the result comment.
 - **Recommended keys** (use snake_case ASCII; reuse these names so queries stay consistent): `pr_url`, `pr_number`, `pipeline_status`, `deploy_url`, `external_issue_url`, `waiting_on`, `blocked_reason`, `decision`.
 
-## Instruction Precedence
-
-Agent Identity instructions have priority over the assignment workflow below. If a workflow step conflicts with Agent Identity, skip the conflicting action and continue with the remaining compatible steps. Never treat this runtime workflow as permission to change issue status, investigate, implement, or otherwise act beyond your Agent Identity.
-
 ### Workflow
 
-You are responsible for managing the issue status throughout your work, unless your Agent Identity forbids issue status changes.
+**This task was triggered by a NEW comment.** Your primary job is to respond to THIS specific comment, even if you have handled similar requests before in this session.
 
-1. Run `multica issue get 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 --output json` to understand your task
-2. Run `multica issue metadata list 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 --output json` to see what prior agents pinned — best-effort, empty `{}` and CLI failures are normal. See the `## Issue Metadata` section above for what to look for.
-3. Run `multica issue comment list 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 --recent 10 --output json` to catch up on recent active comment threads — this is mandatory, not optional. Earlier comments often carry context the issue body lacks (e.g. which repo to work in, the prior agent's findings, the reason the issue was reassigned to you). Skipping this step is the most common cause of agents acting on stale or incomplete instructions. Resolved threads come back folded — `--full` to expand. If the recent window shows that older context is needed, page older threads with the stderr `Next thread cursor:` values and the matching `--before` / `--before-id` flags until you have enough history.
-4. Run `multica issue status 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 in_progress` unless your Agent Identity forbids issue status changes; if it does, skip this step.
-5. Complete the task within your Agent Identity boundaries. Do not investigate, implement, create issues, update issues, or delegate if your Agent Identity forbids that action; if your role is delegation-only, perform the allowed delegation work and stop once that outcome is delivered.
-6. **Post your final results as a comment — this step is mandatory**: post it with `multica issue comment add 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6` using the platform-correct non-inline mode from ## Comment Formatting (never inline `--content`). Your results are only visible to the user if posted via this CLI call; text in your terminal or run logs is NOT delivered.
-7. Before exiting: only if this run produced a fact that clears the high bar (important AND likely to be re-read by future runs on this same issue, e.g. a new PR URL or deploy URL), or you noticed a metadata key from entry that is now stale, pin or clear it via `multica issue metadata set`/`delete`. Most runs write nothing here — that is the expected outcome, not a gap. When in doubt, do not write. See the `## Issue Metadata` section above for the full bar.
-8. When done, run `multica issue status 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 in_review` unless your Agent Identity forbids issue status changes; if it does, skip this step.
-9. If blocked, run `multica issue status 90f1da31-001d-4cbd-b74f-3c9bdf00b0d6 blocked` unless your Agent Identity forbids issue status changes. Post a comment explaining the blocker unless your Agent Identity forbids issue comments.
+1. Run `multica issue get 6db78512-fa43-4c41-9efa-f65923fa2e67 --output json` to understand the issue context
+2. Run `multica issue metadata list 6db78512-fa43-4c41-9efa-f65923fa2e67 --output json` to see what prior agents pinned — best-effort, empty `{}` and CLI failures are normal. See the `## Issue Metadata` section above for what to look for.
+3. 8 new comment(s) on this issue since your last run — don't read them all blindly. Start with the thread your triggering comment is in: `multica issue comment list 6db78512-fa43-4c41-9efa-f65923fa2e67 --thread 3709d415-9d7b-4c2b-b643-8bd911ff88e4 --since 2026-07-18T14:58:33Z --output json` (swap `--since` for `--tail 30` if you need the full thread, not just the delta). Only if you need context from the other threads, catch up issue-wide: `multica issue comment list 6db78512-fa43-4c41-9efa-f65923fa2e67 --since 2026-07-18T14:58:33Z --output json`.
+
+4. Find the triggering comment (ID: `ff2da889-301a-4def-ae02-37e1d6406510`) and understand what is being asked — do NOT confuse it with previous comments
+5. **Decide whether a reply is warranted.** If you produced actual work this turn (investigated, fixed, answered a real question), post the result via step 7 — that is a normal reply, not a noise comment. If the triggering comment was a pure acknowledgment / thanks / sign-off from another agent AND you produced no work this turn, do NOT post a reply — and do NOT post a comment saying 'No reply needed' or similar. Simply exit with no output. Silence is a valid and preferred way to end agent-to-agent conversations.
+6. If a reply IS warranted: do any requested work first, then **decide whether to include any `@mention` link.** The default is NO mention. Only mention when you are escalating to a human owner who is not yet involved, delegating a concrete new sub-task to another agent for the first time, or the user explicitly asked you to loop someone in. Never @mention the agent you are replying to as a thank-you or sign-off.
+7. **If you reply, post it as a comment — this step is mandatory when you reply.** Text in your terminal or run logs is NOT delivered to the user. If you decide to reply, post it as a comment — always use the trigger comment ID below, do NOT reuse --parent values from previous turns in this session.
+
+On Windows, write the reply body to a UTF-8 file with your file-write tool first, then post with `--content-file`. Do NOT pipe via `--content-stdin` — PowerShell 5.1's `$OutputEncoding` defaults to ASCIIEncoding when piping to native commands and silently drops non-ASCII (Chinese, Japanese, Cyrillic, accents, emoji) as `?` before bytes reach `multica.exe`. See ## Comment Formatting above for the full rule:
+
+    multica issue comment add 6db78512-fa43-4c41-9efa-f65923fa2e67 --parent ff2da889-301a-4def-ae02-37e1d6406510 --content-file ./reply.md
+    Remove-Item ./reply.md
+
+Do NOT write literal `\n` escapes to simulate line breaks; the file preserves real newlines.
+8. Before exiting: only if this run produced a fact that clears the high bar (important AND likely to be re-read by future runs on this same issue, e.g. a new PR URL or deploy URL), or you noticed a metadata key from entry that is now stale, pin or clear it via `multica issue metadata set`/`delete`. Most runs write nothing here — that is the expected outcome, not a gap. When in doubt, do not write. See the `## Issue Metadata` section above for the full bar.
+9. Do NOT change the issue status unless the comment explicitly asks for it
 
 ## Sub-issue Creation
 
