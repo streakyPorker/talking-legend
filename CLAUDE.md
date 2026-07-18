@@ -103,6 +103,7 @@ Multica marks the task terminal the moment your top-level turn exits — any bac
 - 每个 RFC 完成后必须保持 git 工作树干净
 - 变更内容提交前由我确认
 - 提交后同步更新所有状态引用（CLAUDE.md 进度表 + RFC 文件状态）
+- 提交包含推送到主干（main）
 
 ## Available Commands
 
