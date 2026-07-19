@@ -62,6 +62,16 @@ Multica marks the task terminal the moment your top-level turn exits — any bac
 
 当前项目：LLM-native 解谜对话游戏，前端 React+Zustand+Tailwind + 后端 NestJS，核心玩法由大模型驱动世界演化和 NPC 对话。不涉及战斗系统。
 
+## 工具链
+
+| 工具 | 用途 | 说明 |
+|------|------|------|
+| SWC | 后端编译 | `swc src -d dist --strip-leading-paths`，94ms 编译 46 文件 |
+| tsc | 类型检查 | `tsc --noEmit`，仅检查不编译，与 SWC 分离 |
+| Vitest | 测试 | 前后端统一，48 后端 + 1 前端 |
+| Vite | 前端构建/开发 | 端口 3000，代理 /api → localhost:3001 |
+| NestJS CLI | 项目脚手架 | `nest build` / `nest start` 因 workspace 路径问题暂未使用 |
+
 ## 核心设计决策（经 Critic 对抗打磨）
 
 | 决策 | 结论 |

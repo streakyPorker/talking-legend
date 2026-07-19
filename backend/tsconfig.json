@@ -3,13 +3,16 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
+    "baseUrl": "./",
     "lib": ["ES2022"],
     "module": "Node16",
     "moduleResolution": "Node16",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "esModuleInterop": true,
-    "isolatedModules": false
+    "isolatedModules": false,
+    "incremental": true,
+    "removeComments": true
   },
   "include": ["src"]
 }
