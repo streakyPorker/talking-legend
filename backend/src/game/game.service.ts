@@ -23,10 +23,10 @@ import { v4 as uuidv4 } from '../utils/id';
 export class GameService {
   constructor(
     @Inject(DB_INSTANCE) private readonly db: Database.Database,
-    private readonly gameRepo: GameRepository,
-    private readonly worldRepo: WorldRepository,
-    private readonly npcRepo: NpcRepository,
-    private readonly playerRepo: PlayerRepository,
+    @Inject(GameRepository) private readonly gameRepo: GameRepository,
+    @Inject(WorldRepository) private readonly worldRepo: WorldRepository,
+    @Inject(NpcRepository) private readonly npcRepo: NpcRepository,
+    @Inject(PlayerRepository) private readonly playerRepo: PlayerRepository,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
