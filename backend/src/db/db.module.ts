@@ -12,7 +12,7 @@ export interface DbModuleConfig {
   dbPath: string;
 }
 
-export const DB_INSTANCE = Symbol('DB_INSTANCE');
+import { DB_INSTANCE } from './tokens';
 
 const REPOSITORIES = [
   GameRepository,
@@ -45,7 +45,7 @@ export class DbModule {
     return {
       module: DbModule,
       providers: [dbProvider, ...REPOSITORIES],
-      exports: [dbProvider],
+      exports: [dbProvider, ...REPOSITORIES],
     };
   }
 }

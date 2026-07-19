@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import type Database from 'better-sqlite3';
 import type { NPCState } from '@talking-legend/shared';
-import { DB_INSTANCE } from '../db.module';
+import { DB_INSTANCE } from '../tokens';
 import type { NpcRow, NpcMemoryRow } from '../rows';
 
 /**

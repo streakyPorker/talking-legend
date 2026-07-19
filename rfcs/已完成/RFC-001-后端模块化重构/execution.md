@@ -39,3 +39,17 @@
 
 - **2026-07-18**: RFC 编写完成，整体设计方案确定。
 - **2026-07-18**: 全部任务实施完成，验收标准全部通过。
+- **2026-07-19**: 修复 DB_INSTANCE 循环依赖、repositories 未导出、GameService DI 失败。补充启动验证。
+
+## 启动验证
+
+```
+[Nest] 8044 - Nest application successfully started
+├── ConfigModule → Settings loaded from ~/.claude/settings.json
+├── DbModule → better-sqlite3 initialized
+├── GameModule → POST /game, POST /game/:id/action
+├── NpcModule → POST /game/:gameId/npc/:npcId/talk
+├── WorldModule → GET /game/:gameId/world
+└── StorylineModule → GET /game/:gameId/storyline
+```
+测试: 48 passed, 0 failed

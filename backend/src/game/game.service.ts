@@ -12,7 +12,7 @@ import type {
   PlayerState,
   WorldState,
 } from '@talking-legend/shared';
-import { DB_INSTANCE } from '../db/db.module';
+import { DB_INSTANCE } from '../db/tokens';
 import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
