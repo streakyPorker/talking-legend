@@ -1,25 +1,12 @@
-# RFC-001: 后端模块化重构（Express → NestJS）
+# RFC-001: 后端模块化重构
 
-> **状态**: Done
+> **状态**: 已完成
 > **优先级**: P0
 > **创建**: 2026-07-18
 
 ---
 
-## 问题
-
-当前后端是单文件 Express 应用 (`backend/src/index.ts` + `routes/game.ts` + `services/game-service.ts`)，平铺结构。后续要接入 GM 引擎、NPC 对话、世界演化、事件链等多个领域，平铺结构会导致：
-
-- 所有逻辑堆在少数文件里，单文件快速膨胀
-- 没有依赖注入，模块间硬 import，测试时难以 mock
-- 中间件（日志、错误处理、成本追踪）手动拼接
-- 请求验证靠手写 if/throw，无统一 schema
-
-## 方案
-
-迁移到 **NestJS**，利用其模块系统和依赖注入天然支持领域拆分。
-
-### 目录结构
+## 目录结构
 
 ```
 backend/
@@ -84,7 +71,7 @@ backend/
       narrative-log.ts          # narrative 文件读写
 ```
 
-### 模块依赖图
+## 模块依赖图
 
 ```
 AppModule
@@ -98,7 +85,7 @@ AppModule
 └── StorylineModule → depends on: DbModule, LlmModule
 ```
 
-### 控制器路由映射
+## 控制器路由映射
 
 | Express 路由 | NestJS 控制器 |
 |-------------|--------------|
@@ -110,14 +97,14 @@ AppModule
 | `GET /api/game/:id/stream/gm` | `GameController.streamGm()` (SSE) |
 | `GET /api/game/:id/stream/npc/:npcId` | `GameController.streamNpc()` (SSE) |
 
-### zod 验证管道
+## Zod 验证管道
 
 ```typescript
 // common/pipes/zod-validation.pipe.ts
 @Injectable()
 export class ZodValidationPipe implements PipeTransform {
   constructor(private schema: ZodSchema) {}
-  
+
   transform(value: unknown) {
     const result = this.schema.safeParse(value);
     if (!result.success) {
@@ -135,7 +122,7 @@ export class ZodValidationPipe implements PipeTransform {
 create(@Body(new ZodValidationPipe(createGameSchema)) body: CreateGameRequest) {}
 ```
 
-### 异常过滤器
+## 异常过滤器
 
 ```typescript
 // common/filters/http-exception.filter.ts
@@ -144,10 +131,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const status = exception instanceof HttpException 
-      ? exception.getStatus() 
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
       : 500;
-    
+
     response.status(status).json({
       success: false,
       error: exception instanceof Error ? exception.message : 'Internal error',
@@ -156,9 +143,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 }
 ```
 
-### 配置服务
+## 配置服务
 
-统一管理所有配置项。唯一配置源：**~/.claude/settings.json**。
+统一管理所有配置项。唯一配置源：**`~/.claude/settings.json`**。
 
 ```typescript
 // config/config.service.ts
@@ -224,7 +211,7 @@ interface SettingsFile {
 ```
 所有 LLM 配置从此读取，不读取环境变量。
 
-### 迁移策略
+## 迁移策略
 
 1. **安装 NestJS**: `npm i @nestjs/common @nestjs/core @nestjs/platform-express reflect-metadata rxjs`
 2. **保留旧代码不动**，新建 `backend/src/` 下各模块
@@ -245,20 +232,6 @@ interface SettingsFile {
 - `package.json` 新增 NestJS 依赖
 - `shared/src/index.ts` 类型不变
 - 前端 API 调用不变（路由路径保持一致）
-
-## 验收标准
-
-| # | 标准 |
-|---|------|
-| AC-1 | `npm run dev` 启动 NestJS 服务，端口从配置读取（默认 3001） |
-| AC-2 | `POST /api/game` 创建游戏，返回 201 + CreateGameResponse |
-| AC-3 | `POST /api/game/:id/action` 处理动作，返回 200 + GameActionResponse |
-| AC-4 | 非法请求返回 `{ success: false, error: "..." }` |
-| AC-5 | 已有 4 个后端 UT 迁移后全部通过 |
-| AC-6 | `GameModule` 可独立测试（mock DbModule + LlmModule） |
-| AC-7 | 旧的 `routes/game.ts` 和 `services/game-service.ts` 已移除 |
-| AC-8 | ConfigService 正确读取 .env + settings.json，配置优先级正确 |
-| AC-9 | 不配 LLM key 时服务不崩溃（仅 warn），骨架模式可用 |
 
 ## 依赖
 
