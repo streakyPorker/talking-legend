@@ -86,6 +86,45 @@ describe('validateWorldConfig — npc.location dangling', () => {
   });
 });
 
+describe('validateWorldConfig — connectedRegions self-reference', () => {
+  it('reports an error when a region lists itself in connectedRegions', () => {
+    const config = makeValidConfig();
+    config.regions[0].connectedRegions = ['village', 'forest'];
+    const errors = validateWorldConfig(config, 'demo-world');
+    expect(
+      errors.some(
+        (e) => e.includes('lists itself in connectedRegions') && e.includes('village'),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('validateWorldConfig — empty npcs is valid', () => {
+  it('returns no errors when regions are valid and npcs is empty', () => {
+    const config = makeValidConfig();
+    config.npcs = [];
+    expect(validateWorldConfig(config, 'demo-world')).toEqual([]);
+  });
+});
+
+describe('validateWorldConfig — empty regions with non-empty npcs', () => {
+  it('reports both startingRegion dangling and every npc.location dangling', () => {
+    const config = makeValidConfig();
+    config.regions = [];
+    const errors = validateWorldConfig(config, 'demo-world');
+    expect(errors.some((e) => e.includes('startingRegion'))).toBe(true);
+    expect(errors.some((e) => e.includes('npc') && e.includes('village'))).toBe(true);
+  });
+});
+
+describe('validateWorldConfig — empty connectedRegions is valid', () => {
+  it('returns no errors for a dead-end region with connectedRegions: []', () => {
+    const config = makeValidConfig();
+    config.regions[1].connectedRegions = [];
+    expect(validateWorldConfig(config, 'demo-world')).toEqual([]);
+  });
+});
+
 describe('validateWorldConfig — duplicate region id', () => {
   it('reports an error when two regions share the same id', () => {
     const config = makeValidConfig();

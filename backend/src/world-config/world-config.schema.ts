@@ -76,6 +76,10 @@ export function validateWorldConfig(config: WorldConfig, dirName: string): strin
 
   for (const region of config.regions) {
     for (const target of region.connectedRegions) {
+      if (target === region.id) {
+        errors.push(`region "${region.id}" lists itself in connectedRegions`);
+        continue;
+      }
       if (!regionIdSet.has(target)) {
         errors.push(
           `region "${region.id}" has connectedRegion "${target}" that does not exist in regions`,
