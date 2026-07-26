@@ -1,6 +1,6 @@
 # RFC-003: 世界配置加载系统 — 执行记录
 
-> **状态**: 正在进行
+> **状态**: 已完成
 > **开始**: 2026-07-26（owner 批准 design v2）
 > **执行方式**: subagent-driven development（implementer → spec 评审 → 质量评审，逐任务串行）
 
@@ -72,10 +72,13 @@ HTTP 400
 
 服务在零世界时正常启动不崩溃（骨架模式），仅建局被拒绝。
 
-### 3. 已知行为差异与后续项
+### 3. 已知行为差异与 Minor backlog（owner 裁决：仅记录不修复）
 
 - **regions 数组顺序**：拆分形态按文件名排序装配（forest/lake/mountains/village），与原硬编码顺序（village 在前）不同。顺序无语义（currentRegion 独立字段），前端如需展示排序另行约定。
-- **质量评审 Minor 项留 backlog**：测试夹具与 worlds/aethelgard 内容重复（漂移风险）、`listWorlds()` 排序显式化、`worlds/README.md` 内容约定文档。
+- **M1 测试夹具漂移风险**：`game-service.test.ts` 内联复制了 aethelgard 内容，与 `worlds/aethelgard/`  Canonical 配置可能漂移。后续可改为从真实 worlds/ 加载。
+- **M2 `worldsDir` cwd 脆弱**：`process.cwd()/../worlds` 依赖从 `backend/` 启动；从其他 cwd 启动会静默进入骨架模式。后续可改为相对 `__dirname` 解析或支持 `WORLDS_DIR` 环境变量。
+- **M3 `listWorlds()` 顺序隐式**：依赖 readdir 插入序，多世界时 "Available:" 消息顺序非显式契约。后续可按 id 排序。
+- **M4 缺 `worlds/README.md`**：内容约定（三来源合并、all-or-nothing vs 逐文件容错、id=目录名）目前只在 design.md，内容作者无入口文档。
 - **rtk tsc 包装陷阱**：`npx tsc` 输出不可信（曾报假的 TS5101、也曾掩盖 70 个真实错误），类型检查一律用 `node node_modules/typescript/bin/tsc --noEmit`。
 
 验证用测试数据（3 局 T4 游戏）已从 `backend/data/talking-legend.db` 删除。

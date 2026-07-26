@@ -1,6 +1,6 @@
 # RFC-003: 世界配置加载系统
 
-> **状态**: 正在进行
+> **状态**: 已完成
 > **优先级**: P0
 > **创建**: 2026-07-26
 
@@ -93,7 +93,7 @@ backend/src/world-config/
 
 | 方法 | 行为 |
 |------|------|
-| `loadAll()` | 扫描 `worldsDir` 子目录 → 逐世界装配多来源 → zod 校验 → 注册 |
+| `loadFromDir(dir)` | 清空注册表，扫描指定目录 → 逐世界装配多来源 → zod 校验 → 注册（原子替换，供 onModuleInit 与测试复用） |
 | `getWorld(id)` | 返回配置；不存在返回 `undefined` |
 | `listWorlds()` | 返回所有已注册世界的摘要（id/name） |
 | `getDefaultWorld()` | 唯一世界时返回它；多世界时返回 `id` 字典序第一个；无世界返回 `undefined` |
