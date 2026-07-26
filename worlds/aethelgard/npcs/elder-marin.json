@@ -1,0 +1,8 @@
+{
+  "key": "elder-marin",
+  "name": "Elder Marin",
+  "role": "Village Elder",
+  "personality": "Wise, patient, and carries the weight of many stories.",
+  "initialMood": "welcoming",
+  "location": "village"
+}

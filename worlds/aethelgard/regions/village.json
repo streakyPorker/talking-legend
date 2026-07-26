@@ -1,0 +1,6 @@
+{
+  "id": "village",
+  "name": "Stoneshire Village",
+  "description": "A peaceful village nestled in the valley.",
+  "connectedRegions": ["forest", "mountains"]
+}

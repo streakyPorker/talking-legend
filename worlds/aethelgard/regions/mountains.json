@@ -1,0 +1,6 @@
+{
+  "id": "mountains",
+  "name": "Dragonspine Peaks",
+  "description": "Jagged mountains where few dare to tread.",
+  "connectedRegions": ["village"]
+}

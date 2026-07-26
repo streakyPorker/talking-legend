@@ -1,0 +1,6 @@
+{
+  "id": "lake",
+  "name": "Mirror Lake",
+  "description": "A crystal-clear lake that reflects more than just the sky.",
+  "connectedRegions": ["forest"]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "forest",
+  "name": "Whispering Woods",
+  "description": "Ancient trees that murmur secrets to those who listen.",
+  "connectedRegions": ["village", "lake"]
+}

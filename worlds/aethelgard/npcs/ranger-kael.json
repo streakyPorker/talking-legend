@@ -1,0 +1,8 @@
+{
+  "key": "ranger-kael",
+  "name": "Ranger Kael",
+  "role": "Forest Ranger",
+  "personality": "Quiet, observant, fiercely protective of the woods.",
+  "initialMood": "cautious",
+  "location": "forest"
+}
