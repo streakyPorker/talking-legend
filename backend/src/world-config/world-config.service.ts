@@ -17,7 +17,7 @@ import {
 @Injectable()
 export class WorldConfigService implements OnModuleInit {
   private readonly logger = new Logger(WorldConfigService.name);
-  private readonly registry = new Map<string, WorldConfig>();
+  private registry = new Map<string, WorldConfig>();
 
   constructor(private readonly config: ConfigService) {}
 
@@ -26,12 +26,14 @@ export class WorldConfigService implements OnModuleInit {
   }
 
   /**
-   * Clear the registry and re-scan the given directory. Public so tests can
-   * point the loader at tmp fixtures without bootstrapping Nest.
-   * Never throws — every failure mode is logged and skipped.
+   * Re-scan the given directory and atomically swap the registry. Public so
+   * tests can point the loader at tmp fixtures without bootstrapping Nest.
+   * Never throws — every failure mode is logged and skipped. Build-then-swap:
+   * the existing registry is only replaced after the new scan completes, so
+   * a mid-scan IO failure cannot leave the service in a half-cleared state.
    */
   loadFromDir(dir: string): void {
-    this.registry.clear();
+    const next = new Map<string, WorldConfig>();
 
     let entries: fs.Dirent[];
     try {
@@ -40,6 +42,7 @@ export class WorldConfigService implements OnModuleInit {
       this.logger.warn(
         `worldsDir "${dir}" does not exist or is unreadable — starting with empty registry`,
       );
+      this.registry = next;
       return;
     }
 
@@ -48,18 +51,20 @@ export class WorldConfigService implements OnModuleInit {
       const worldDir = path.join(dir, entry.name);
       const config = this.assembleWorld(worldDir, entry.name);
       if (config) {
-        this.registry.set(config.id, config);
+        next.set(config.id, config);
         this.logger.log(
           `Loaded world "${config.id}" (${config.regions.length} regions, ${config.npcs.length} npcs)`,
         );
       }
     }
 
-    if (this.registry.size === 0) {
+    if (next.size === 0) {
       this.logger.warn(
         `No valid world configs found in "${dir}" — running in skeleton mode`,
       );
     }
+
+    this.registry = next;
   }
 
   getWorld(id: string): WorldConfig | undefined {
@@ -173,6 +178,13 @@ export class WorldConfigService implements OnModuleInit {
    *   b. <section>.json single file containing an array
    *   c. <section>/ directory of *.json files, one object per file
    * Per-file errors are logged and skipped without failing the world.
+   *
+   * Error-tolerance policy differs by source, intentionally:
+   *   - <section>.json is ALL-OR-NOTHING: one bad element skips the whole file.
+   *     Rationale: the file is a single authorial unit; partial acceptance
+   *     would silently drop content the author expected to be atomic.
+   *   - <section>/ directory is PER-FILE tolerant: each file is an independent
+   *     unit, so one corrupt file does not poison its siblings.
    */
   private collectSection<T>(
     worldDir: string,
@@ -184,11 +196,31 @@ export class WorldConfigService implements OnModuleInit {
     const out: T[] = [];
     if (inline) out.push(...inline);
 
-    // (b) <section>.json — single file containing an array
+    // (b) <section>.json — single file containing an array (all-or-nothing)
     const arrayFile = path.join(worldDir, `${section}.json`);
-    if (fs.existsSync(arrayFile)) {
+    let arrayRaw: string | undefined;
+    try {
+      arrayRaw = fs.readFileSync(arrayFile, 'utf-8');
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        this.logger.error(
+          `World "${dirName}": cannot read ${section}.json (${(err as Error).message}) — skipping this file`,
+        );
+      }
+      // ENOENT → file absent, silently skip (this source is optional)
+    }
+    if (arrayRaw !== undefined) {
+      let json: unknown;
       try {
-        const json: unknown = JSON.parse(fs.readFileSync(arrayFile, 'utf-8'));
+        json = JSON.parse(arrayRaw);
+      } catch (err) {
+        this.logger.error(
+          `World "${dirName}": ${section}.json is not valid JSON (${(err as Error).message}) — skipping this file`,
+        );
+        json = undefined;
+      }
+      if (json !== undefined) {
         if (!Array.isArray(json)) {
           this.logger.error(
             `World "${dirName}": ${section}.json is not an array — skipping this file`,
@@ -209,46 +241,49 @@ export class WorldConfigService implements OnModuleInit {
           }
           if (!fileFailed) out.push(...items);
         }
-      } catch (err) {
-        this.logger.error(
-          `World "${dirName}": ${section}.json is not valid JSON (${(err as Error).message}) — skipping this file`,
-        );
       }
     }
 
-    // (c) <section>/ directory of *.json files — one object per file
+    // (c) <section>/ directory of *.json files — one object per file (per-file tolerant)
     const sectionDir = path.join(worldDir, section);
-    if (fs.existsSync(sectionDir) && fs.statSync(sectionDir).isDirectory()) {
-      let files: string[];
+    let files: string[] = [];
+    try {
+      files = fs
+        .readdirSync(sectionDir)
+        .filter((f) => f.endsWith('.json'))
+        .sort();
+    } catch {
+      // Missing dir / not a dir / unreadable → silently skip (this source is optional)
+      files = [];
+    }
+    for (const file of files) {
+      const filePath = path.join(sectionDir, file);
+      let raw: string;
       try {
-        files = fs
-          .readdirSync(sectionDir)
-          .filter((f) => f.endsWith('.json'))
-          .sort();
+        raw = fs.readFileSync(filePath, 'utf-8');
       } catch (err) {
         this.logger.error(
-          `World "${dirName}": cannot read ${section}/ directory (${(err as Error).message}) — skipping directory`,
+          `World "${dirName}": cannot read ${section}/${file} (${(err as Error).message}) — skipping this file`,
         );
-        files = [];
+        continue;
       }
-      for (const file of files) {
-        const filePath = path.join(sectionDir, file);
-        try {
-          const json: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-          const parsed = itemSchema.safeParse(json);
-          if (!parsed.success) {
-            this.logger.error(
-              `World "${dirName}": ${section}/${file} failed schema (${parsed.error.message}) — skipping this file`,
-            );
-            continue;
-          }
-          out.push(parsed.data as T);
-        } catch (err) {
-          this.logger.error(
-            `World "${dirName}": ${section}/${file} is not valid JSON (${(err as Error).message}) — skipping this file`,
-          );
-        }
+      let json: unknown;
+      try {
+        json = JSON.parse(raw);
+      } catch (err) {
+        this.logger.error(
+          `World "${dirName}": ${section}/${file} is not valid JSON (${(err as Error).message}) — skipping this file`,
+        );
+        continue;
       }
+      const parsed = itemSchema.safeParse(json);
+      if (!parsed.success) {
+        this.logger.error(
+          `World "${dirName}": ${section}/${file} failed schema (${parsed.error.message}) — skipping this file`,
+        );
+        continue;
+      }
+      out.push(parsed.data as T);
     }
 
     return out;
