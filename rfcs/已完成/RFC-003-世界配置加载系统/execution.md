@@ -32,7 +32,7 @@
 
 ## 完工验证证据
 
-环境：Windows 11 + git-bash，`npm run build -w backend`（SWC 51 文件 96ms）后 `node dist/main.js`（cwd=`backend/`）。测试：`npx vitest run` **9 文件 88 测试全通过**；`node node_modules/typescript/bin/tsc --noEmit` 零错误（注意：裸 `npx tsc` 被 rtk 包装会掩盖真实错误）。
+环境：Windows 11 + git-bash，`npm run build -w backend`（SWC 51 文件 96ms）后 `node dist/main.js`（cwd=`backend/`）。测试：`npx vitest run` **9 文件 88 测试全通过**；`node node_modules/typescript/bin/tsc --noEmit` 零错误（验证当时裸 `npx tsc` 被 rtk 包装会掩盖真实错误；rtk 已于 2026-07-26 从 Claude 配置中移除，`npx tsc` 此后可直接使用）。
 
 ### 1. 启动日志 — 世界加载
 
@@ -79,6 +79,6 @@ HTTP 400
 - **M2 `worldsDir` cwd 脆弱**：`process.cwd()/../worlds` 依赖从 `backend/` 启动；从其他 cwd 启动会静默进入骨架模式。后续可改为相对 `__dirname` 解析或支持 `WORLDS_DIR` 环境变量。
 - **M3 `listWorlds()` 顺序隐式**：依赖 readdir 插入序，多世界时 "Available:" 消息顺序非显式契约。后续可按 id 排序。
 - **M4 缺 `worlds/README.md`**：内容约定（三来源合并、all-or-nothing vs 逐文件容错、id=目录名）目前只在 design.md，内容作者无入口文档。
-- **rtk tsc 包装陷阱**：`npx tsc` 输出不可信（曾报假的 TS5101、也曾掩盖 70 个真实错误），类型检查一律用 `node node_modules/typescript/bin/tsc --noEmit`。
+- **rtk tsc 包装陷阱（历史记录，已解决）**：验证期间 `npx tsc` 输出不可信（曾报假的 TS5101、也曾掩盖 70 个真实错误）。rtk 已于 2026-07-26 从 Claude 配置中彻底移除（PreToolUse hook + @RTK.md 导入 + 项目权限项），此陷阱不再存在。
 
 验证用测试数据（3 局 T4 游戏）已从 `backend/data/talking-legend.db` 删除。
