@@ -27,8 +27,18 @@ export class ConfigService {
 
   // 路径
   get dbPath(): string      { return path.join(process.cwd(), 'data', 'talking-legend.db'); }
-  get worldsDir(): string   { return path.join(process.cwd(), '..', 'worlds'); }
   get gameDataDir(): string { return path.join(process.cwd(), 'data', 'games'); }
+
+  /**
+   * Resolve the worlds/ directory robustly regardless of cwd.
+   * Priority: WORLDS_DIR env var → __dirname-relative (works from both
+   * src/config/ during tests and dist/config/ in production — both are 3 hops
+   * from repo root).
+   */
+  get worldsDir(): string {
+    if (process.env.WORLDS_DIR) return process.env.WORLDS_DIR;
+    return path.resolve(__dirname, '..', '..', '..', 'worlds');
+  }
 
   private get settingsPath(): string {
     return path.join(os.homedir(), '.claude', 'settings.json');

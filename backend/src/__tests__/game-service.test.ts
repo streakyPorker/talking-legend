@@ -60,23 +60,11 @@ function writeWorld(
   }
 }
 
-// Canonical aethelgard-equivalent fixture (split form, mirrors worlds/aethelgard/).
+// Copy canonical aethelgard config from worlds/aethelgard/ so the integration
+// test stays in sync with the real content.  Uses fs.cpSync (Node 16.7+).
 function writeAethelgard(root: string): void {
-  writeWorld(root, 'aethelgard', {
-    name: 'Aethelgard',
-    description: 'A realm where legends are forged by deeds and words hold power.',
-    startingRegion: 'village',
-    regions: [
-      { id: 'village', name: 'Stoneshire Village', description: 'A peaceful village nestled in the valley.', connectedRegions: ['forest', 'mountains'] },
-      { id: 'forest', name: 'Whispering Woods', description: 'Ancient trees that murmur secrets to those who listen.', connectedRegions: ['village', 'lake'] },
-      { id: 'mountains', name: 'Dragonspine Peaks', description: 'Jagged mountains where few dare to tread.', connectedRegions: ['village'] },
-      { id: 'lake', name: 'Mirror Lake', description: 'A crystal-clear lake that reflects more than just the sky.', connectedRegions: ['forest'] },
-    ],
-    npcs: [
-      { key: 'elder-marin', name: 'Elder Marin', role: 'Village Elder', personality: 'Wise, patient, and carries the weight of many stories.', initialMood: 'welcoming', location: 'village' },
-      { key: 'ranger-kael', name: 'Ranger Kael', role: 'Forest Ranger', personality: 'Quiet, observant, fiercely protective of the woods.', initialMood: 'cautious', location: 'forest' },
-    ],
-  });
+  const src = path.resolve(__dirname, '..', '..', '..', 'worlds', 'aethelgard');
+  fs.cpSync(src, path.join(root, 'aethelgard'), { recursive: true });
 }
 
 function writeSecondWorld(root: string): void {

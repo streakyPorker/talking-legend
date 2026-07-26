@@ -72,10 +72,9 @@ export class WorldConfigService implements OnModuleInit {
   }
 
   listWorlds(): Array<{ id: string; name: string }> {
-    return Array.from(this.registry.values()).map((w) => ({
-      id: w.id,
-      name: w.name,
-    }));
+    return Array.from(this.registry.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, w]) => ({ id, name: w.name }));
   }
 
   getDefaultWorld(): WorldConfig | undefined {
