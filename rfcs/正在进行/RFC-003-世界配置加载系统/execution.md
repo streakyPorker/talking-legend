@@ -8,10 +8,12 @@
 
 | 任务 | 内容 | 状态 |
 |------|------|------|
-| T1 | `world-config.schema.ts` + zod 校验规则 + 函数级单测 | ⬜ |
-| T2 | `world-config.service.ts` + module（多来源装配/注册表/宽松错误策略）+ 模块级单测 | ⬜ |
-| T3 | `worlds/aethelgard/` 拆分形态内容迁移 + `GameService.createGame()` 改造 + 服务级集成测试 | ⬜ |
-| T4 | 完工铁律验证（启动日志 + curl 矩阵）+ 本文件实证补录 | ⬜ |
+| T1 | `world-config.schema.ts` + zod 校验规则 + 函数级单测 | ✅（18 测试；spec 评审 ✅ / 质量评审修复后 APPROVE） |
+| T2 | `world-config.service.ts` + module（多来源装配/注册表/宽松错误策略）+ 模块级单测 | ✅（17 测试；spec ✅ / 质量修复后 APPROVE） |
+| T3 | `worlds/aethelgard/` 拆分形态内容迁移 + `GameService.createGame()` 改造 + 服务级集成测试 | ✅（88/88 全量；spec ✅ / 质量 APPROVE） |
+| T4 | 完工铁律验证（启动日志 + curl 矩阵）+ 本文件实证补录 | ✅ |
+
+关键 commit：899de17(T1) → bdd7fad+dec342a(T1 修复) → dc18d66(T2) → 7434abe(T2 修复) → fbb810f+7460dce+b2ad5a7(T3)
 
 依赖：T1→T2→T3 串行（后者依赖前者接口），T4 收尾。
 
@@ -30,4 +32,50 @@
 
 ## 完工验证证据
 
-（T4 完成后补录：启动日志 + curl 矩阵 + 测试输出）
+环境：Windows 11 + git-bash，`npm run build -w backend`（SWC 51 文件 96ms）后 `node dist/main.js`（cwd=`backend/`）。测试：`npx vitest run` **9 文件 88 测试全通过**；`node node_modules/typescript/bin/tsc --noEmit` 零错误（注意：裸 `npx tsc` 被 rtk 包装会掩盖真实错误）。
+
+### 1. 启动日志 — 世界加载
+
+```
+[Nest] LOG [InstanceLoader] WorldConfigModule dependencies initialized
+[Nest] LOG [WorldConfigService] Loaded world "aethelgard" (4 regions, 2 npcs)
+[Nest] LOG [NestApplication] Nest application successfully started
+Talking Legend backend running on http://localhost:3001
+```
+
+### 2. curl 矩阵
+
+**无 scenario（默认世界，向后兼容）→ 201**：
+
+```json
+{"success":true,"data":{"gameId":"8e8ec460-...","initialState":{"world":{"name":"Aethelgard","description":"A realm where legends are forged...","regions":[{...village/forest/mountains/lake...}],"currentRegion":"village"},...}}}
+```
+
+字段核查（第三局真实响应）：`currentRegion=village`、`player.location=village`、NPC 实例 `id` 为每局新 uuid、`memoryOfPlayer=[]`、`isAlive=true`、配置 `key`（elder-marin/ranger-kael）在响应中**不存在**。
+
+**显式 scenario=aethelgard → 201** ✓
+
+**未知 scenario → 400 结构化错误**：
+
+```json
+HTTP 400
+{"success":false,"error":"Unknown scenario: narnia. Available: aethelgard"}
+```
+
+**零世界骨架模式**（从 `backend/dist` 启动使 worldsDir 解析到不存在的 `backend/worlds`）：
+
+```
+WARN [WorldConfigService] worldsDir "...backend\worlds" does not exist or is unreadable — starting with empty registry
+HTTP 400
+{"success":false,"error":"No world configs available"}
+```
+
+服务在零世界时正常启动不崩溃（骨架模式），仅建局被拒绝。
+
+### 3. 已知行为差异与后续项
+
+- **regions 数组顺序**：拆分形态按文件名排序装配（forest/lake/mountains/village），与原硬编码顺序（village 在前）不同。顺序无语义（currentRegion 独立字段），前端如需展示排序另行约定。
+- **质量评审 Minor 项留 backlog**：测试夹具与 worlds/aethelgard 内容重复（漂移风险）、`listWorlds()` 排序显式化、`worlds/README.md` 内容约定文档。
+- **rtk tsc 包装陷阱**：`npx tsc` 输出不可信（曾报假的 TS5101、也曾掩盖 70 个真实错误），类型检查一律用 `node node_modules/typescript/bin/tsc --noEmit`。
+
+验证用测试数据（3 局 T4 游戏）已从 `backend/data/talking-legend.db` 删除。
