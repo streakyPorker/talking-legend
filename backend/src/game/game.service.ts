@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import type Database from 'better-sqlite3';
 import type {
   CreateGameRequest,
@@ -17,6 +17,7 @@ import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
+import { WorldConfigService } from '../world-config/world-config.service';
 import { v4 as uuidv4 } from '../utils/id';
 
 @Injectable()
@@ -27,56 +28,56 @@ export class GameService {
     @Inject(WorldRepository) private readonly worldRepo: WorldRepository,
     @Inject(NpcRepository) private readonly npcRepo: NpcRepository,
     @Inject(PlayerRepository) private readonly playerRepo: PlayerRepository,
+    @Inject(WorldConfigService) private readonly worldConfig: WorldConfigService,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
     const gameId = uuidv4();
     const playerName = req.playerName;
 
-    // Seed worlds table
+    const config = req.scenario
+      ? this.worldConfig.getWorld(req.scenario)
+      : this.worldConfig.getDefaultWorld();
+    if (!config) {
+      throw new BadRequestException(
+        req.scenario
+          ? `Unknown scenario: ${req.scenario}. Available: ${this.worldConfig.listWorlds().map((w) => w.id).join(', ')}`
+          : 'No world configs available',
+      );
+    }
+
+    // Seed worlds table — runtime defaults (time/weather/events) stay in code
     const worldState: WorldState = {
-      name: 'Aethelgard',
-      description: 'A realm where legends are forged by deeds and words hold power.',
-      regions: [
-        { id: 'village', name: 'Stoneshire Village', description: 'A peaceful village nestled in the valley.', connectedRegions: ['forest', 'mountains'] },
-        { id: 'forest', name: 'Whispering Woods', description: 'Ancient trees that murmur secrets to those who listen.', connectedRegions: ['village', 'lake'] },
-        { id: 'mountains', name: 'Dragonspine Peaks', description: 'Jagged mountains where few dare to tread.', connectedRegions: ['village'] },
-        { id: 'lake', name: 'Mirror Lake', description: 'A crystal-clear lake that reflects more than just the sky.', connectedRegions: ['forest'] },
-      ],
-      currentRegion: 'village',
+      name: config.name,
+      description: config.description,
+      regions: config.regions.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        connectedRegions: r.connectedRegions,
+      })),
+      currentRegion: config.startingRegion,
       timeOfDay: 'morning',
       weather: 'clear',
       globalEvents: [],
     };
 
-    // Seed NPCs table
-    const npcs: NPCState[] = [
-      {
-        id: uuidv4(),
-        name: 'Elder Marin',
-        role: 'Village Elder',
-        personality: 'Wise, patient, and carries the weight of many stories.',
-        currentMood: 'welcoming',
-        location: 'village',
-        memoryOfPlayer: [],
-        isAlive: true,
-      },
-      {
-        id: uuidv4(),
-        name: 'Ranger Kael',
-        role: 'Forest Ranger',
-        personality: 'Quiet, observant, fiercely protective of the woods.',
-        currentMood: 'cautious',
-        location: 'forest',
-        memoryOfPlayer: [],
-        isAlive: true,
-      },
-    ];
+    // Seed NPCs table — id/memory/aliveness are per-game-instance runtime state
+    const npcs: NPCState[] = config.npcs.map((cfg) => ({
+      id: uuidv4(),
+      name: cfg.name,
+      role: cfg.role,
+      personality: cfg.personality,
+      currentMood: cfg.initialMood,
+      location: cfg.location,
+      memoryOfPlayer: [],
+      isAlive: true,
+    }));
 
     // Seed players table
     const playerState: PlayerState = {
       name: playerName,
-      location: 'village',
+      location: config.startingRegion,
       inventory: [],
       reputation: {},
       quests: [],

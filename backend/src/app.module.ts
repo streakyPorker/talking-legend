@@ -7,12 +7,14 @@ import { NpcModule } from './npc/npc.module';
 import { WorldModule } from './world/world.module';
 import { StorylineModule } from './storyline/storyline.module';
 import { LlmModule } from './llm/llm.module';
+import { WorldConfigModule } from './world-config/world-config.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 @Module({
   imports: [
     ConfigModule,
+    WorldConfigModule,
     DbModule.forRoot({ dbPath: './data/talking-legend.db' }),
     LlmModule,
     GameModule,
