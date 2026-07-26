@@ -1,3 +1,44 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> The `MULTICA-RUNTIME` block below is auto-managed — do not edit inside its markers. It holds the agent workflow, RFC process, toolchain notes, and Git discipline. This top section covers repo layout, commands, and architecture.
+
+## Commands
+
+npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo root with `-w <workspace>`, or `cd` into the workspace.
+
+| Task | Command |
+|------|---------|
+| Install | `npm install` |
+| Dev (both) | `npm run dev` — backend :3001 + frontend :3000 |
+| Dev backend | `npm run dev -w backend` — SWC watch + `node --watch dist/main.js` |
+| Dev frontend | `npm run dev -w frontend` — Vite, proxies `/api` → :3001 |
+| Build all | `npm run build` — shared → backend → frontend (order matters: consumers import shared's `dist/`) |
+| Typecheck | `npm run typecheck` |
+| Test all | `npm test` |
+| Test one file | `npx vitest run src/db/repositories/game.repository.spec.ts` (from `backend/` or `frontend/`) |
+| Test by name | `npx vitest run -t "<name>"` |
+
+Backend gotchas:
+- Use the npm scripts only. Do NOT run via `tsx` (breaks NestJS decorator metadata) or `nest start` (workspace path issues) — see git history.
+- Compilation is SWC (`.swcrc`: legacy decorators + decorator metadata, CommonJS out); `tsc` is typecheck-only.
+- LLM config does NOT come from a `.env` file — `ConfigService` reads the `env` block of `~/.claude/settings.json` (`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`). Without it the backend logs "skeleton mode".
+- SQLite file lands at `<cwd>/data/talking-legend.db`; start the backend from `backend/` so data stays in `backend/data/`.
+
+## Architecture
+
+- **`shared/`** (`@talking-legend/shared`) — TypeScript types + API contracts (`GameState`, request/response DTOs). Single source of truth for the frontend↔backend wire format; rebuild it before typechecking consumers.
+- **`backend/`** — NestJS 11 + better-sqlite3, global `/api` prefix. Feature modules (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository:
+  - Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests.
+  - `db/DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 8 tables), and exports repositories + the `DB_INSTANCE` token.
+  - Multi-write operations run inside `db.transaction(...)`; turn bumps use optimistic concurrency (`updateTurn(gameId, newTurn, expectedTurn)`).
+  - Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
+  - `llm/client.ts` — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Real LLM calls are mostly still TODO (e.g. `GameService.performAction` returns placeholder narrative).
+- **`frontend/`** — React 18 + Vite. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand/Tailwind appear in design docs as the target stack but are NOT installed yet — trust `package.json`, not the design text.
+
+Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__tests__/`), frontend `jsdom` + Testing Library (`src/test-setup.ts`).
+
 <!-- BEGIN MULTICA-RUNTIME (auto-managed; do not edit) -->
 # Multica Agent Runtime
 
