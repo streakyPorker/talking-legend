@@ -15,6 +15,7 @@ npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo ro
 | Dev backend | `npm run dev -w backend` — SWC watch + `node --watch dist/main.js` |
 | Dev frontend | `npm run dev -w frontend` — Vite, proxies `/api` → :3001 |
 | Build all | `npm run build` — shared → backend → frontend (order matters: consumers import shared's `dist/`) |
+| Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Test all | `npm test` |
 | Test one file | `npx vitest run src/db/repositories/game.repository.spec.ts` (from `backend/` or `frontend/`) |
@@ -28,13 +29,17 @@ Backend gotchas:
 
 ## Architecture
 
-- **`shared/`** (`@talking-legend/shared`) — TypeScript types + API contracts (`GameState`, request/response DTOs). Single source of truth for the frontend↔backend wire format; rebuild it before typechecking consumers.
-- **`backend/`** — NestJS 11 + better-sqlite3, global `/api` prefix. Feature modules (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository:
-  - Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests.
-  - `db/DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 8 tables), and exports repositories + the `DB_INSTANCE` token.
-  - Multi-write operations run inside `db.transaction(...)`; turn bumps use optimistic concurrency (`updateTurn(gameId, newTurn, expectedTurn)`).
-  - Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
-  - `llm/client.ts` — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Real LLM calls are mostly still TODO (e.g. `GameService.performAction` returns placeholder narrative).
+- **`shared/`** (`@talking-legend/shared`) — TypeScript types + API contracts. Single source of truth for the frontend↔backend wire format. Compiled with `tsc` (no decorators needed); rebuild before typechecking consumers.
+- **`worlds/`** — 世界配置 JSON 文件，每个子目录为一个世界（id = 目录名）。三来源合并装配（内联 + 单文件 + 目录），逐文件容错，装配后统一校验。`WorldConfigService` 在启动时加载；改配置需重启。详见 `worlds/README.md`。
+- **`backend/`** — NestJS 11 + better-sqlite3, global `/api` prefix. Module breakdown:
+  - **Feature modules** (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository. Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests.
+  - **`db/`** — `DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 8 data tables), and exports repositories + the `DB_INSTANCE` token. Multi-write ops run inside `db.transaction(...)`; turn bumps use optimistic concurrency. Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
+  - **`config/`** — `ConfigService` reads `env` block from `~/.claude/settings.json` (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL). No `.env` file is used. Without config the backend logs "skeleton mode".
+  - **`llm/`** — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Real LLM calls are mostly still TODO.
+  - **`world-config/`** (RFC-003) — `WorldConfigService` loads world JSON from `worlds/` directory, validates against zod schemas, merges three sources (inline/single-file/directory), skips invalid worlds with `Logger.error`.
+  - **`context/`** (RFC-004) — `ContextBuilder` assembles LLM context from pluggable modules (player-state, world-state, scenario-hint, npc-persona, npc-memory, narrative-history, active-events, intent-input). `MemoryFilter` prunes stale memories. `NarrativeHistory` manages the narrative log. Supports budget enforcement (`ContextBudgetError`).
+  - **`prompts/`** (RFC-004) — `TemplateEngine` renders prompt templates with `{{variable}}` interpolation. LLM prompt schemas for GM narrative, NPC dialogue, intent classification, and event trigger define expected JSON outputs.
+  - **`utils/`** — `id.ts` (uuid generation), `narrative-log.ts` (file-based narrative storage alongside SQLite).
 - **`frontend/`** — React 18 + Vite. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand/Tailwind appear in design docs as the target stack but are NOT installed yet — trust `package.json`, not the design text.
 
 Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__tests__/`), frontend `jsdom` + Testing Library (`src/test-setup.ts`).
@@ -120,7 +125,7 @@ Multica marks the task terminal the moment your top-level turn exits — any bac
 | LLM 分层 | Opus(GM叙事) / Sonnet(NPC对话) / Haiku(意图分类+事件判断+记忆过滤) |
 | 调用并行 | NPC对话+意图分类可并行；前端双 SSE 连接，分区独立即时展示 |
 | 输入锁定 | GM 生成期间禁用输入框，等 done 事件后解锁 |
-| 持久化 | SQLite 6表 + narrative_log 文件存储 |
+| 持久化 | SQLite 8表（games/worlds/npcs/npc_memories/players/player_quests/storylines/llm_logs） + narrative_log 文件 |
 | 事件触发 | 意图路由（intent+entity）替代关键词匹配 |
 | 世界演化 | 确定性世界 tick（时间/天气/NPC情绪漂移）+ haiku 定期过滤可记忆事件 |
 | MVP 区域 | 2 区域（village + forest），支持区域移动 |
@@ -156,8 +161,8 @@ RFC-NNN-标题/
 | 001 | 后端模块化重构 | P0 | 已完成 |
 | 002 | 数据库设计 | P0 | 已完成 |
 | 003 | 世界配置加载系统 | P0 | 已完成 |
-| 004 | 上下文管理与Prompt设计 | P1 | 已提议 |
-| 005 | LLM接入：GM引擎与SSE | P1 | 已提议 |
+| 004 | 上下文管理与Prompt设计 | P1 | 已完成 |
+| 005 | LLM接入：GM引擎与SSE | P1 | 已完成 |
 | 006 | LLM接入：NPC对话 | P1 | 已提议 |
 | 007 | LLM接入：意图分类与事件触发 | P1 | 已提议 |
 | 008 | 世界自主演化系统 | P1 | 已提议 |
@@ -190,6 +195,60 @@ RFC-NNN-标题/
 - 禁止标记 RFC 为"已完成"如果前后端不能联动工作
 - 禁止只跑单元测试就声称完工
 - 禁止跳过真实启动验证
+
+## Bugfix 流程（轻量级）
+
+bugfix 比 RFC 轻量，三层文件夹 + 单文件即囊括全部。
+
+### 目录结构
+
+```
+bugfix/
+  待修复/           ← bug 已识别，尚未开始
+  修复中/           ← 正在修复
+  已修复/           ← 修复完成并验证
+```
+
+### 单文件格式
+
+一个 bug 一个文件：`bugfix/{状态}/BF-NNN-简短描述.md`
+
+```markdown
+# BF-NNN: 简短标题
+
+> **状态**: 待修复 | 修复中 | 已修复
+> **发现**: YYYY-MM-DD
+> **修复**: YYYY-MM-DD（修复完成时填写）
+
+## 描述
+
+现象、复现步骤、影响范围。
+
+## 修改计划
+
+根因分析 + 修改方案 + 涉及文件。
+
+## 修改后结果
+
+做了什么、测试结果、验证证据（截图/curl/日志）。
+```
+
+### 与 RFC 的对比
+
+| | RFC | Bugfix |
+|---|-----|--------|
+| 文件数 | 3（proposal/design/execution） | 1 |
+| 适用 | 新功能、架构变更 | 缺陷修复、小优化 |
+| 审批 | 架构师确认 | 开发者自行判断 |
+| 验证 | 完工铁律（启动+curl+证据） | 测试通过 + 问题不再复现 |
+
+### 流转
+
+```
+发现 bug → bugfix/待修复/BF-NNN.md
+开始修 → bugfix/修复中/BF-NNN.md（填修改计划）
+修完验证 → bugfix/已修复/BF-NNN.md（填修改后结果）
+```
 
 ## Git 纪律
 

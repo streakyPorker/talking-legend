@@ -117,6 +117,113 @@ npm run build -w backend
 | NPC 记忆 | 三级过滤（important 永久 / normal 最近10 / trivial 仅计数） |
 | Token 预算 | 非强制模块逐模块降级 full→compact→minimal，强制模块不可降，超预算 fail fast |
 
+## 完工验证（2026-07-28）
+
+### 1. 测试
+
+```
+npm test
+  14 backend test files passed
+  1 frontend test file passed
+  148 tests total (147 backend + 1 frontend), zero failures
+```
+
+### 2. Typecheck
+
+```
+npm run typecheck
+  @talking-legend/shared   → tsc --noEmit ✓
+  @talking-legend/backend  → tsc --noEmit ✓
+  @talking-legend/frontend → tsc --noEmit ✓
+```
+
+### 3. 构建
+
+```
+npm run build -w shared && npm run build -w backend
+  shared: tsc ✓
+  backend: Successfully compiled: 79 files with swc (219.76ms)
+```
+
+### 4. 启动日志
+
+```
+[migrate] v1 (initial_schema) applied.
+[Nest] Nest application successfully started
+[WorldConfigService] Loaded world "aethelgard" (4 regions, 2 npcs)
+Talking Legend backend running on http://localhost:3001
+
+Routes:
+  POST  /api/game
+  POST  /api/game/:id/action
+  GET   /api/health
+  POST  /api/game/:gameId/npc/:npcId/talk
+  GET   /api/game/:gameId/world
+  GET   /api/game/:gameId/storyline
+```
+
+### 5. API 验证
+
+**Health check:**
+```bash
+$ curl http://localhost:3001/api/health
+{"success":true,"data":{"status":"ok"}}
+```
+
+**创建游戏（有效请求）:**
+```bash
+$ curl -X POST http://localhost:3001/api/game \
+  -H "Content-Type: application/json" \
+  -d '{"playerName":"TestHero","scenario":"aethelgard"}'
+{"success":true,"data":{"gameId":"4ef72d6b-...","initialState":{...4 regions, 2 npcs, turn:0, phase:"intro"}}}
+```
+
+**创建游戏（非法请求 — 空 body）:**
+```bash
+$ curl -X POST http://localhost:3001/api/game \
+  -H "Content-Type: application/json" -d '{}'
+{"success":false,"error":"Bad Request Exception"}
+```
+
+**创建游戏（未知 scenario）:**
+```bash
+$ curl -X POST http://localhost:3001/api/game \
+  -H "Content-Type: application/json" \
+  -d '{"playerName":"Hero","scenario":"nonexistent"}'
+{"success":false,"error":"Unknown scenario: nonexistent. Available: aethelgard"}
+```
+
+**执行动作:**
+```bash
+$ curl -X POST http://localhost:3001/api/game/4ef72d6b-.../action \
+  -H "Content-Type: application/json" \
+  -d '{"gameId":"4ef72d6b-...","action":"explore the village"}'
+{"success":true,"data":{"narrative":"You explore the village...","updatedState":{...turn:1,phase:"exploration"}}}
+```
+
+**获取世界状态:**
+```bash
+$ curl http://localhost:3001/api/game/4ef72d6b-.../world
+{"success":true,"data":{"gameId":"4ef72d6b-...","state":"[world state coming in RFC-008]"}}
+```
+
+**未知游戏 ID:**
+```bash
+$ curl -X POST http://localhost:3001/api/game/nonexistent-id/action \
+  -H "Content-Type: application/json" \
+  -d '{"gameId":"nonexistent-id","action":"test"}'
+{"success":false,"error":"Game not found: nonexistent-id"}
+```
+
+### RFC 完工铁律检查清单
+
+| # | 检查项 | 结果 |
+|---|--------|------|
+| 1 | `npm run dev` 成功启动，路由映射全部打印 | ✅ 6 条路由 |
+| 2 | `curl` 调用核心 API 返回有效响应（200/201） | ✅ game/create/action/health/world |
+| 3 | 非法请求返回结构化错误 | ✅ 空 body + 未知 scenario + 未知 gameId |
+| 4 | execution.md 粘贴启动日志 + API 响应 | ✅（本节） |
+
 ## 遗留事项
 
 | # | 内容 | 处置 |
