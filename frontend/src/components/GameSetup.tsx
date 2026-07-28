@@ -22,7 +22,7 @@ export function GameSetup({ onGameStart }: GameSetupProps) {
       const result = await createGame(playerName.trim());
       onGameStart(result.initialState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start game');
+      setError(err instanceof Error ? err.message : '无法开始游戏');
     } finally {
       setIsLoading(false);
     }
@@ -31,22 +31,21 @@ export function GameSetup({ onGameStart }: GameSetupProps) {
   return (
     <div className="game-setup">
       <div className="setup-card">
-        <h1 className="setup-title">Talking Legend</h1>
+        <h1 className="setup-title">传说之语</h1>
         <p className="setup-subtitle">
-          Enter a world where your words shape destiny. Speak, explore, and
-          become the legend you were meant to be.
+          言语即是力量。你的话语将塑造这个世界，你的选择将决定命运的方向。
         </p>
 
         <form onSubmit={handleSubmit} className="setup-form">
           <label htmlFor="player-name" className="setup-label">
-            What is your name, adventurer?
+            勇者，请留下你的名字：
           </label>
           <input
             id="player-name"
             type="text"
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
-            placeholder="Enter your name..."
+            placeholder="输入姓名…"
             className="setup-input"
             disabled={isLoading}
             autoFocus
@@ -59,7 +58,7 @@ export function GameSetup({ onGameStart }: GameSetupProps) {
             className="setup-button"
             disabled={isLoading || !playerName.trim()}
           >
-            {isLoading ? 'Preparing your adventure...' : 'Begin Your Legend'}
+            {isLoading ? '命运之轮转动中…' : '开启传奇'}
           </button>
         </form>
       </div>
