@@ -1,6 +1,6 @@
 {
   "id": "lake",
-  "name": "Mirror Lake",
-  "description": "A crystal-clear lake that reflects more than just the sky.",
+  "name": "镜湖",
+  "description": "湖水清澈如镜，却映照出天空之外的景象。有人说在无风的夜晚，能看见湖底若隐若现的微光。",
   "connectedRegions": ["forest"]
 }

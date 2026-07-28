@@ -149,7 +149,7 @@ describe('ContextProvider', () => {
       expect(result.tokenEstimate).toBeGreaterThan(0);
 
       // systemPrompt 应包含 key 数据
-      expect(result.systemPrompt).toContain('世界状态');
+      expect(result.systemPrompt).toContain('世界设定');
       expect(result.systemPrompt).toContain('清晨');
       expect(result.systemPrompt).toContain('晴朗');
       expect(result.systemPrompt).toContain('village_center');
@@ -183,7 +183,7 @@ describe('ContextProvider', () => {
       const result = await provider.buildGMContext('game-1', BUDGET);
 
       expect(result).toBeDefined();
-      expect(result.systemPrompt).toContain('世界状态');
+      expect(result.systemPrompt).toContain('世界设定');
       // 默认值应生效
       expect(result.systemPrompt).toContain('清晨');
       expect(result.systemPrompt).toContain('晴朗');

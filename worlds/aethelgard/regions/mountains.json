@@ -1,6 +1,6 @@
 {
   "id": "mountains",
-  "name": "Dragonspine Peaks",
-  "description": "Jagged mountains where few dare to tread.",
+  "name": "龙脊峰",
+  "description": "陡峭的山脊如巨龙脊背般绵延，山顶终年积雪。传说龙族曾在此栖息，留下了不为人知的宝藏。",
   "connectedRegions": ["village"]
 }

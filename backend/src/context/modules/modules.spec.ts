@@ -28,17 +28,17 @@ describe('WorldStateModule', () => {
       timeOfDay: '黄昏',
       weather: '暴雨',
       currentRegion: 'forest',
-      currentRegionName: 'Whispering Woods',
+      currentRegionName: '低语森林',
       regions: [
-        { id: 'village', name: '村庄' },
-        { id: 'forest', name: '森林' },
+        { id: 'village', name: '村庄', description: '宁静的村庄' },
+        { id: 'forest', name: '低语森林', description: '古老森林' },
       ],
     });
     const text = mod.renderFull();
     expect(text).toContain('黄昏');
     expect(text).toContain('暴雨');
-    expect(text).toContain('forest');
-    expect(text).toContain('Whispering Woods');
+    expect(text).toContain('低语森林');
+    expect(text).toContain('古老森林');
   });
 
   it('compact returns single-line summary', () => {

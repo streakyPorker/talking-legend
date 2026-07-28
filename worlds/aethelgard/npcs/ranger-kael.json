@@ -1,8 +1,8 @@
 {
   "key": "ranger-kael",
-  "name": "Ranger Kael",
-  "role": "Forest Ranger",
-  "personality": "Quiet, observant, fiercely protective of the woods.",
-  "initialMood": "cautious",
+  "name": "游侠凯尔",
+  "role": "森林游侠",
+  "personality": "沉默寡言、目光如鹰，对森林的一草一木了如指掌，誓死守护这片林地。",
+  "initialMood": "警觉",
   "location": "forest"
 }

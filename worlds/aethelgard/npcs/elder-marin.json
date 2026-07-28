@@ -1,8 +1,8 @@
 {
   "key": "elder-marin",
-  "name": "Elder Marin",
-  "role": "Village Elder",
-  "personality": "Wise, patient, and carries the weight of many stories.",
-  "initialMood": "welcoming",
+  "name": "长老马林",
+  "role": "村中长老",
+  "personality": "睿智、沉稳，眼中藏着无数古老的故事，对村中每一个人的命运都了然于心。",
+  "initialMood": "慈祥",
   "location": "village"
 }

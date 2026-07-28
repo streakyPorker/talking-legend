@@ -1,6 +1,6 @@
 {
   "id": "village",
-  "name": "Stoneshire Village",
-  "description": "A peaceful village nestled in the valley.",
+  "name": "石辉村",
+  "description": "群山环抱的宁静村落，石板路两旁是古老的石屋，村口的老橡树下总有人歇脚。",
   "connectedRegions": ["forest", "mountains"]
 }

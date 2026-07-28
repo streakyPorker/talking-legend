@@ -66,14 +66,28 @@ export class ContextProvider {
 
     const modules = new Map<string, ContextModule>();
 
-    // world_state（强制）
+    // 读取 NPC 列表
+    const npcs = this.npcRepo.findByGameId(gameId);
+
+    // world_state（强制）— 注入完整世界描述+区域详情+NPC
     const worldModule = new WorldStateModule();
     worldModule.setData({
       timeOfDay: world?.timeOfDay ?? '清晨',
       weather: world?.weather ?? '晴朗',
       currentRegion: world?.currentRegion ?? '未知',
       currentRegionName: worldCfg?.regions?.find((r) => r.id === world?.currentRegion)?.name ?? '',
-      regions: world?.regions ?? [],
+      worldDescription: worldCfg?.description ?? world?.description ?? '',
+      regions: (world?.regions ?? []).map((r) => {
+        const cfg = worldCfg?.regions?.find((c) => c.id === r.id);
+        return { id: r.id, name: cfg?.name ?? r.name, description: cfg?.description ?? r.description };
+      }),
+      npcs: (npcs ?? []).map((n) => ({
+        name: n.name,
+        role: n.role,
+        personality: n.personality,
+        location: n.location,
+        mood: n.currentMood,
+      })),
     });
     modules.set('world_state', worldModule);
 

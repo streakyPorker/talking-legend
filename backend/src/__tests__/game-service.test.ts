@@ -132,7 +132,7 @@ describe('GameService', () => {
       expect(result.gameId).toBeDefined();
       expect(result.gameId).toMatch(/^[a-f0-9-]{36}$/);
       expect(result.initialState.player.name).toBe('TestHero');
-      expect(result.initialState.world.name).toBe('Aethelgard');
+      expect(result.initialState.world.name).toBe('艾瑟尔加德');
       expect(result.initialState.phase).toBe('intro');
       expect(result.initialState.npcs).toHaveLength(2);
     });
@@ -157,7 +157,7 @@ describe('GameService', () => {
 
       const world = worldRepo.findByGameId(gameId);
       expect(world).toBeDefined();
-      expect(world!.name).toBe('Aethelgard');
+      expect(world!.name).toBe('艾瑟尔加德');
 
       const npcs = npcRepo.findByGameId(gameId);
       expect(npcs).toHaveLength(2);

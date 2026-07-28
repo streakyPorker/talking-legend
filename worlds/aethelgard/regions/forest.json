@@ -1,6 +1,6 @@
 {
   "id": "forest",
-  "name": "Whispering Woods",
-  "description": "Ancient trees that murmur secrets to those who listen.",
+  "name": "低语森林",
+  "description": "参天古木遮天蔽日，林间低语着古老的秘密。微风穿过枝叶，仿佛在诉说千年前的故事。",
   "connectedRegions": ["village", "lake"]
 }
