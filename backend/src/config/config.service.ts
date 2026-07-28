@@ -16,7 +16,7 @@ export class ConfigService {
     this.load();
   }
 
-  get port(): number { return 3001; }
+  get port(): number { return Number(process.env.PORT) || 4001; }
 
   // LLM — 全部来自 settings.json
   get llmApiKey(): string    { return this.getEnv('ANTHROPIC_AUTH_TOKEN') ?? ''; }

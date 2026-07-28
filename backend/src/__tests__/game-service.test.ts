@@ -9,6 +9,7 @@ import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
+import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
 import type { ConfigService } from '../config/config.service';
 
@@ -92,13 +93,23 @@ describe('GameService', () => {
   function buildService(): void {
     worldConfig = new WorldConfigService({ worldsDir: tmpRoot } as ConfigService);
     worldConfig.loadFromDir(tmpRoot);
+    const storylineRepo = new StorylineRepository(db);
+    // Mock GMEngine — the integration test does not exercise LLM generation
+    const mockGmEngine = {
+      generate: async function* () {
+        yield { type: 'chunk', content: 'Mock narrative' };
+        yield { type: 'done', turn: 1, tokenEstimate: 0 };
+      },
+    } as unknown as import('../llm/gm-engine').GMEngine;
     service = new GameService(
       db,
       new GameRepository(db),
       new WorldRepository(db),
       new NpcRepository(db),
       new PlayerRepository(db),
+      storylineRepo,
       worldConfig,
+      mockGmEngine,
     );
   }
 

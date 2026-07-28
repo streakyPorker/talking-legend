@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import type Database from 'better-sqlite3';
 import type {
   CreateGameRequest,
@@ -17,18 +17,24 @@ import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
+import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
+import { GMEngine } from '../llm/gm-engine';
 import { v4 as uuidv4 } from '../utils/id';
 
 @Injectable()
 export class GameService {
+  private readonly activeGenerations = new Set<string>();
+
   constructor(
     @Inject(DB_INSTANCE) private readonly db: Database.Database,
     @Inject(GameRepository) private readonly gameRepo: GameRepository,
     @Inject(WorldRepository) private readonly worldRepo: WorldRepository,
     @Inject(NpcRepository) private readonly npcRepo: NpcRepository,
     @Inject(PlayerRepository) private readonly playerRepo: PlayerRepository,
+    @Inject(StorylineRepository) private readonly storylineRepo: StorylineRepository,
     @Inject(WorldConfigService) private readonly worldConfig: WorldConfigService,
+    @Inject(GMEngine) private readonly gmEngine: GMEngine,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
@@ -157,5 +163,52 @@ export class GameService {
     };
 
     return { narrative, npcResponses, worldChanges, updatedState };
+  }
+
+  async *performActionStream(
+    gameId: string,
+    action: string,
+    target?: string,
+  ): AsyncIterable<string> {
+    // 并发锁：同一局游戏同一时间只能有一个 GM 生成
+    if (this.activeGenerations.has(gameId)) {
+      throw new ConflictException('GM is already generating for this game');
+    }
+    this.activeGenerations.add(gameId);
+
+    try {
+      // Phase 1: db.transaction 读取快照 + turn bump
+      const snapshot = this.db.transaction(() => {
+        const game = this.gameRepo.findById(gameId);
+        if (!game) {
+          throw new NotFoundException(`Game not found: ${gameId}`);
+        }
+        const newTurn = game.turn + 1;
+        const updated = this.gameRepo.updateTurn(gameId, newTurn, game.turn);
+        if (!updated) {
+          throw new ConflictException('Game modified by another request');
+        }
+        const world = this.worldRepo.findByGameId(gameId);
+        const player = this.playerRepo.findByGameId(gameId);
+        if (!world || !player) {
+          throw new Error('Game state incomplete');
+        }
+        return {
+          turn: newTurn,
+          world,
+          npcs: this.npcRepo.findByGameId(gameId),
+          player,
+          storyline: this.storylineRepo.findByGameId(gameId),
+        };
+      })();
+
+      // Phase 2: GMEngine generate
+      const generator = this.gmEngine.generate(gameId, action, target, snapshot.turn);
+      for await (const event of generator) {
+        yield JSON.stringify(event);
+      }
+    } finally {
+      this.activeGenerations.delete(gameId);
+    }
   }
 }
