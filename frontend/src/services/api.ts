@@ -38,3 +38,20 @@ export async function performAction(
     body: JSON.stringify({ gameId, action, target }),
   });
 }
+
+/** SSE 流式 GM 叙事 — 返回 ReadableStreamDefaultReader */
+export async function performActionStream(
+  gameId: string,
+  action: string,
+  target?: string,
+): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+  const response = await fetch(`${API_BASE}/game/${encodeURIComponent(gameId)}/action/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, target }),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Stream request failed: ${response.status}`);
+  }
+  return response.body.getReader();
+}

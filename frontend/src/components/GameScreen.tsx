@@ -1,6 +1,23 @@
 import { useState, type FormEvent } from 'react';
 import type { GameState } from '@talking-legend/shared';
-import { performAction } from '../services/api.js';
+import { performActionStream } from '../services/api.js';
+
+/** 简易 markdown 渲染：**bold** *italic* `code` 换行 */
+function renderMarkdown(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="inline-code">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
 
 interface GameScreenProps {
   gameState: GameState;
@@ -23,12 +40,60 @@ export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
     setError(null);
 
     // Show player action immediately
-    setNarrative((prev) => [...prev, `> ${actionText}`]);
+    const playerLine = `> ${actionText}`;
+    setNarrative((prev) => [...prev, playerLine]);
 
     try {
-      const result = await performAction(gameState.id, actionText);
-      setNarrative((prev) => [...prev, result.narrative]);
-      onGameUpdate(result.updatedState);
+      const reader = await performActionStream(gameState.id, actionText);
+
+      // 流式累积当前叙事片段
+      let currentChunk = '';
+      setNarrative((prev) => [...prev, '']); // placeholder for streaming
+
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === 'chunk') {
+            currentChunk += data.content;
+            // 流式更新最后一行
+            setNarrative((prev) => {
+              const copy = [...prev];
+              copy[copy.length - 1] = currentChunk;
+              return copy;
+            });
+          } else if (data.type === 'done') {
+            // 更新 turn
+            onGameUpdate({ ...gameState, turn: data.turn });
+            // 记录 playtest 数据
+            fetch('/api/playtest/record', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                worldId: 'aethelgard',
+                playerName: gameState.player.name,
+                action: actionText,
+                narrative: currentChunk,
+                turn: data.turn,
+                tokenEstimate: data.tokenEstimate,
+              }),
+            }).catch(() => {});
+          } else if (data.type === 'error') {
+            setError(data.message);
+          }
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Action failed');
     } finally {
@@ -57,15 +122,21 @@ export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
               What will you do?
             </p>
           )}
-          {narrative.map((line, i) => (
-            <p
-              key={i}
-              className={line.startsWith('>') ? 'player-action' : 'world-narrative'}
-            >
-              {line}
-            </p>
-          ))}
-          {isLoading && <p className="thinking-indicator">The world responds...</p>}
+          {narrative.map((line, i) => {
+            if (line.startsWith('>')) {
+              return <p key={i} className="player-action">{line}</p>;
+            }
+            // 渲染 AI 叙事 — 按段落拆分，支持 **bold** 和 *italic*
+            const paragraphs = line.split('\n\n');
+            return (
+              <div key={i} className="world-narrative">
+                {paragraphs.map((para, j) => (
+                  <p key={j}>{renderMarkdown(para)}</p>
+                ))}
+              </div>
+            );
+          })}
+          {isLoading && <p className="thinking-indicator">命运之轮转动中…</p>}
           {error && <p className="action-error">{error}</p>}
         </div>
 
