@@ -163,7 +163,8 @@ RFC-NNN-标题/
 | 003 | 世界配置加载系统 | P0 | 已完成 |
 | 004 | 上下文管理与Prompt设计 | P1 | 已完成 |
 | 005 | LLM接入：GM引擎与SSE | P1 | 已完成 |
-| 006 | LLM接入：NPC对话 | P1 | 已提议 |
+| 013 | LLM思考链支持 | P0 | 已提议 |
+| 006 | LLM接入：NPC对话 | P1 | 进行中 |
 | 007 | LLM接入：意图分类与事件触发 | P1 | 已提议 |
 | 008 | 世界自主演化系统 | P1 | 已提议 |
 | 009 | 事件链引擎 | P2 | 已提议 |
@@ -254,22 +255,33 @@ bugfix/
 
 以下规则约束所有 git 操作。破坏规则的 commit 会被退回重做。
 
+### 提交铁律
+
+**所有修改必须提交**，不允许长时间保留未提交的 working tree 变更。每次修改完成后立即分组 commit + push。
+
+### 提交前缀
+
+每个 commit message 必须以 `<type>(<scope>): ` 开头，type 和 scope 对齐以下三轨：
+
+| type | scope | 含义 | 例子 |
+|------|-------|------|------|
+| `feat` | `rfcNNN` | RFC 新功能 | `feat(rfc5): LLMClient 重构` |
+| `fix` | `bfNNN` 或 `rfcNNN` | Bug 修复或 RFC 缺陷修补 | `fix(bf6-1): 前端中文化` |
+| `chore` | — | 杂项（配置、依赖、文档、清理） | `chore: 更新 .gitignore` |
+| `docs` | — | 纯文档（RFC 文件、README） | `docs: RFC-004 归档` |
+
 ### 有意义的提交
 
-- **每个 RFC 或功能完成后，必须做有意义的 git commit**
-  - 提交信息必须清晰描述「做了什么」和「为什么做」
-  - 好例子：`feat(db): replace in-memory Map with better-sqlite3 — 8 tables + migration + CRUD repositories`
-  - 差例子：`fix bug`、`update`、`wip`
-- **commit 粒度应支持独立验证**
-  - 一个 commit = 一个可理解、可回滚的变更单元
-  - 每个 commit 对应的变更应能独立运行测试并通过
-  - 禁止将无关联的变更揉进同一个 commit（如 "fix bug + refactor + add feature"）
+- 提交信息必须清晰描述「做了什么」和「为什么做」
+- 好例子：`feat(rfc5): LLMClient 重构 — @Injectable() + stream() 六事件SSE`
+- 差例子：`fix bug`、`update`、`wip`
+- **commit 粒度应支持独立验证**：一个 commit = 一个可理解、可回滚的变更单元，禁止无关联变更混入
 
 ### 状态同步
 
-- **推送前确保 working tree 干净**：重大/批量更新前必须先 commit 或 stash 所有未跟踪和已修改文件
-- **完成后必须 push 到远端仓库**：避免本地变更丢失或他人无法同步
-- **不要在 main 分支上直接修改已推送的 commit**：需要修正时，在现有 commit 之上追加新的修复 commit
+- **推送前确保 working tree 干净**
+- **完成后必须 push 到远端仓库**
+- **不要在 main 分支上直接修改已推送的 commit**
 
 ### 提交流程
 
