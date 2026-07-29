@@ -129,9 +129,15 @@ export function ConfigScreen({ onClose }: Props) {
         return;
       }
 
-      // 更新成功，同步 initialValues
-      setInitialValues((prev) => ({ ...prev, ...dirty }));
+      // 更新成功，重新拉取配置刷新 sections 中的值
       setDirty({});
+      try {
+        const data = await getConfig();
+        setSections(data.sections);
+        const init: Record<string, string | number> = {};
+        for (const s of data.sections) for (const i of s.items) init[dotKey(s, i)] = i.value;
+        setInitialValues(init);
+      } catch { /* sections 刷新失败不影响已保存的结果 */ }
 
       // 提示信息
       const hotCount = result.applied.length - result.restartRequired.length;
