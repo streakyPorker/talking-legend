@@ -47,9 +47,8 @@ build() {
 
 backend() {
   echo "🚀 启动后台 (port $BACKEND_PORT)..."
-  cd "$ROOT/backend"
-  rm -f data/talking-legend.db
-  node dist/main.js &
+  (cd "$ROOT/backend" && rm -f data/talking-legend.db && node dist/main.js) &
+  sleep 2
   wait_backend
   echo "✅ 后台就绪: http://localhost:$BACKEND_PORT"
 }
@@ -58,8 +57,7 @@ backend() {
 
 frontend() {
   echo "🚀 启动前台 (port $FRONTEND_PORT)..."
-  cd "$ROOT/frontend"
-  npx vite --port $FRONTEND_PORT &
+  (cd "$ROOT/frontend" && npx vite --port $FRONTEND_PORT) &
   sleep 3
   echo "✅ 前台就绪: http://localhost:$FRONTEND_PORT"
 }
