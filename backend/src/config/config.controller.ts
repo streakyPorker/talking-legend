@@ -46,9 +46,9 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '模型层级前缀',
     restartRequired: true,
     items: [
-      { key: 'opus', tomlPath: 'model_tiers.opus', label: 'Opus 前缀', type: 'text', hotReload: false, readonly: true },
-      { key: 'sonnet', tomlPath: 'model_tiers.sonnet', label: 'Sonnet 前缀', type: 'text', hotReload: false, readonly: true },
-      { key: 'haiku', tomlPath: 'model_tiers.haiku', label: 'Haiku 前缀', type: 'text', hotReload: false, readonly: true },
+      { key: 'opus', tomlPath: 'model_tiers.opus', label: 'Opus 前缀', type: 'text', hotReload: false },
+      { key: 'sonnet', tomlPath: 'model_tiers.sonnet', label: 'Sonnet 前缀', type: 'text', hotReload: false },
+      { key: 'haiku', tomlPath: 'model_tiers.haiku', label: 'Haiku 前缀', type: 'text', hotReload: false },
     ],
   },
   {
@@ -93,7 +93,7 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '流式超时',
     restartRequired: false,
     items: [
-      { key: 'timeout_ms', tomlPath: 'llm.stream.timeout_ms', label: '超时 (ms)', type: 'number', hotReload: true, min: 5000, max: 300000 },
+      { key: 'timeout_ms', tomlPath: 'llm.stream.timeout_ms', label: '超时 (ms)', type: 'number', hotReload: true, min: 1000, max: 300000 },
     ],
   },
   {
@@ -101,7 +101,7 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: 'NPC 对话',
     restartRequired: false,
     items: [
-      { key: 'history_rounds', tomlPath: 'npc.history_rounds', label: '历史轮数', type: 'number', hotReload: true, min: 1, max: 100 },
+      { key: 'history_rounds', tomlPath: 'npc.history_rounds', label: '历史轮数', type: 'number', hotReload: true, min: 0, max: 100 },
     ],
   },
 ];
@@ -323,8 +323,12 @@ export class ConfigController {
         continue;
       }
 
-      // 序列化 TOML 值（字符串加引号，数字不加）
-      const serialized = typeof value === 'string' ? `"${value.replace(/"/g, '\\"')}"` : String(value);
+      // model_tiers.* 是 TOML 数组格式：将逗号分隔字符串转为 ["a", "b"]
+      // 普通字段：字符串加引号，数字不加
+      const isArrayValue = dotPath.startsWith('model_tiers.');
+      const serialized = isArrayValue
+        ? `[${String(value).split(',').map((s) => `"${s.trim().replace(/"/g, '\\"')}"`).join(', ')}]`
+        : typeof value === 'string' ? `"${value.replace(/"/g, '\\"')}"` : String(value);
 
       const replaced = applyTomlChange(lines, parsed.section, parsed.keyName, serialized);
 

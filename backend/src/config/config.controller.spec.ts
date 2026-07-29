@@ -162,14 +162,14 @@ describe('ConfigController — GET /api/config', () => {
     expect(value).toBe('****');
   });
 
-  it('response 中 readonly 字段正确返回', () => {
+  it('model_tiers 不再是 readonly（允许编辑）', () => {
     const svc = createMockConfig();
     const ctrl = new ConfigController(svc);
     const res = ctrl.getConfig();
 
     const sec = res.sections.find((s) => s.key === 'model_tiers')!;
     for (const item of sec.items) {
-      expect(item.readonly).toBe(true);
+      expect(item.readonly).toBe(false);
     }
   });
 });
@@ -204,13 +204,14 @@ describe('ConfigController — PUT /api/config', () => {
     expect(res).toHaveProperty('errors');
   });
 
-  it('只读字段拒绝写入并返回错误', () => {
+  it('model_tiers 允许写入（不再只读）', () => {
     const svc = createMockConfig();
     const ctrl = new ConfigController(svc);
-    const res = ctrl.updateConfig({ changes: { 'model_tiers.opus': 'new-value' } });
+    const res = ctrl.updateConfig({ changes: { 'model_tiers.opus': 'claude-opus-4, test-model' } });
 
-    expect(res.errors).toContain('model_tiers.opus: is readonly');
-    expect(res.applied).toEqual([]);
+    expect(res.errors).toEqual([]);
+    expect(res.applied).toContain('model_tiers.opus');
+    expect(res.restartRequired).toContain('model_tiers.opus');
   });
 
   it('浮点数写入整数字段返回错误', () => {
