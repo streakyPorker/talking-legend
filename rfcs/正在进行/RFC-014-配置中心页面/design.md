@@ -1,6 +1,7 @@
 # RFC-014: 配置中心页面
 
-> **状态**: 设计中（grill-me 深度访谈产出）
+> **状态**: 设计中（grill-me 15 轮深度访谈 v2）
+> **优先级**: P0（紧急）
 > **优先级**: P0（紧急）
 > **创建**: 2026-07-29
 > **依赖**: —（独立）
@@ -187,7 +188,47 @@ package.json                    🔧 +tailwindcss +daisyui deps
 | 单元 | TOML 行级替换 — 保留注释/匹配/追加 |
 | 组件 | ConfigScreen 渲染 7 组 16 项 + 保存回调 |
 
-## 6. 非目标
+## 7. 深化设计（Q9—Q15）
+
+### TOML 数组全量替换
+`model_tiers` 数组项全量替换——前端传新数组，后端直接写 `key = ["a", "b"]`。不可热加载。
+
+### ConfigService.reloadToml() 全量重读
+`PUT` 写文件 → `TOML.parse` 全量重读 → 更新 `this.toml`。getter 始终从 `this.toml` 读取，单一真源。
+
+### GET 返回格式：扁平 sections 数组
+后端维护 `CONFIG_SCHEMA` 常量，输出 `{ sections: [{ key, label, items: [{ key, label, value, type, hotReload }] }] }`。前端纯渲染。
+
+### PUT 请求体：扁平 changes map
+前端只发 `{ "llm.max_tokens.opus": 80000 }`。后端按 dot-path 逐行匹配替换。
+
+### dot-path → TOML 行级替换：section 范围精确匹配
+状态机定位 `[section]` → 在下一个 `[xxx]` 前匹配 key 行 → 替换值。不跨 section 误伤。
+
+### sections 元数据：硬编码 ConfigController
+```typescript
+const CONFIG_SCHEMA = {
+  sections: [
+    { key: 'anthropic', label: '模型配置', restartRequired: true,
+      items: [
+        { key: 'opus_model', label: 'Opus 模型', type: 'text', hotReload: false },
+        { key: 'sonnet_model', label: 'Sonnet 模型', type: 'text', hotReload: false },
+        ...
+      ] },
+    { key: 'llm.max_tokens', label: 'Token 预算', restartRequired: false,
+      items: [
+        { key: 'opus', label: 'Opus', type: 'number', hotReload: true },
+        ...
+      ] },
+    ...
+  ]
+};
+```
+
+### CSS 策略：daisyUI dark 主题 + 现有变量共存
+daisyUI dark 主题注入全局 `--color-*` CSS 变量。现有内联 `<style>` 中的 `var(--color-primary)` 等变量被 daisyUI 主题覆盖，天然兼容。ConfigScreen 用 Tailwind class。后续 RFC-010 逐步替换现有内联 CSS。
+
+## 8. 文件变更
 
 - ❌ 配置历史/回滚
 - ❌ 多配置文件切换
