@@ -80,10 +80,14 @@ export function ConfigScreen({ onClose }: Props) {
       const key = dotKey(section, item);
       let parsedValue: string | number = newValue;
       if (item.type === 'number') {
-        if (newValue === '') return; // ignore empty number input
-        const n = Number(newValue);
-        if (isNaN(n)) return;
-        parsedValue = n;
+        // 允许空字符串（用户清空输入框），保存时再校验
+        if (newValue === '') {
+          parsedValue = '';
+        } else {
+          const n = Number(newValue);
+          if (isNaN(n)) return;
+          parsedValue = n;
+        }
       }
       const initial = initialValues[key];
 

@@ -8,7 +8,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import * as fs from 'fs';
-import * as path from 'path';
 import { ConfigService } from './config.service.js';
 
 // ── 配置 schema 元数据（硬编码） ──────────────────────────────────
@@ -109,21 +108,23 @@ const CONFIG_SCHEMA: ConfigSection[] = [
 
 // ── 响应类型 ─────────────────────────────────────────────────────
 
+interface ConfigItemResponse {
+  key: string;
+  label: string;
+  value: string | number;
+  type: string;
+  hotReload: boolean;
+  readonly: boolean;
+  min?: number;
+  max?: number;
+}
+
 interface GetConfigResponse {
   sections: Array<{
     key: string;
     label: string;
     restartRequired: boolean;
-    items: Array<{
-      key: string;
-      label: string;
-      value: string | number;
-      type: string;
-      hotReload: boolean;
-      readonly: boolean;
-      min?: number;
-      max?: number;
-    }>;
+    items: ConfigItemResponse[];
   }>;
 }
 
@@ -264,7 +265,7 @@ export class ConfigController {
       const content = fs.readFileSync(tomlPath, 'utf-8');
       lines = content.split('\n');
     } catch {
-      return { applied: [], restartRequired: [], errors: [`Cannot read config.toml at ${tomlPath}`] };
+      return { applied: [], restartRequired: [], errors: ['Cannot read config.toml'] };
     }
 
     // 构建 schema 查找表：tomlPath → ConfigItem
@@ -281,8 +282,13 @@ export class ConfigController {
 
     for (const dotPath of dotPaths) {
       const value = changes[dotPath];
-      if (value === undefined || value === null || typeof value === 'boolean') {
+      if (value === undefined || value === null) {
         errors.push(`${dotPath}: value is required`);
+        continue;
+      }
+      // 类型守卫：只允许 string 和 number
+      if (typeof value !== 'string' && typeof value !== 'number') {
+        errors.push(`${dotPath}: value must be a string or number`);
         continue;
       }
 
@@ -293,10 +299,18 @@ export class ConfigController {
         continue;
       }
 
+      // 只读字段拒绝写入
+      if (item.readonly) {
+        errors.push(`${dotPath}: is readonly`);
+        continue;
+      }
+
       // 数字范围校验
       if (item.type === 'number') {
         const num = Number(value);
         if (isNaN(num)) { errors.push(`${dotPath}: must be a number`); continue; }
+        // 浮点数写入整数字段检查
+        if (!Number.isInteger(num)) { errors.push(`${dotPath}: must be an integer`); continue; }
         if (item.min !== undefined && num < item.min) { errors.push(`${dotPath}: min ${item.min}`); continue; }
         if (item.max !== undefined && num > item.max) { errors.push(`${dotPath}: max ${item.max}`); continue; }
       }
@@ -309,15 +323,13 @@ export class ConfigController {
         continue;
       }
 
-      // 序列化 TOML 值（字符串加引号，数字和布尔值不加）
+      // 序列化 TOML 值（字符串加引号，数字不加）
       const serialized = typeof value === 'string' ? `"${value.replace(/"/g, '\\"')}"` : String(value);
 
       const replaced = applyTomlChange(lines, parsed.section, parsed.keyName, serialized);
 
       if (replaced) {
         applied.push(dotPath);
-
-        // 检查是否可热加载
         const schemaItem = itemByTomlPath.get(dotPath);
         if (schemaItem && !schemaItem.hotReload) {
           restartRequired.push(dotPath);
@@ -327,14 +339,21 @@ export class ConfigController {
       }
     }
 
+    // 🔴 修复: errors 非空且没有有效修改时，跳过写入文件
+    if (errors.length > 0 && applied.length === 0) {
+      return { applied, restartRequired, errors };
+    }
+
     // 写回文件
     try {
       fs.writeFileSync(tomlPath, lines.join('\n'), 'utf-8');
+      this.logger.log(`Config file written to ${tomlPath} (${applied.length} changes)`);
     } catch {
+      this.logger.error(`Failed to write config file at ${tomlPath}`);
       return {
         applied: [],
         restartRequired: [],
-        errors: [`Cannot write config.toml at ${tomlPath}`],
+        errors: ['Cannot write config.toml'],
       };
     }
 
@@ -344,68 +363,14 @@ export class ConfigController {
     return { applied, restartRequired, errors };
   }
 
-  /** 通过 ConfigService 的 getter 获取当前值 */
+  /** 通过 ConfigService 的 getTomlValue 获取当前值 */
   private resolveValue(item: ConfigItem): string | number {
-    const tomlPath = item.tomlPath;
-    // 硬编码映射到 ConfigService 的 getter
-    let raw: string | number;
+    // password 类型不回传实际值
+    if (item.type === 'password') return '****';
 
-    switch (tomlPath) {
-      case 'anthropic.opus_model':
-        raw = this.configService.llmOpusModel;
-        break;
-      case 'anthropic.sonnet_model':
-        raw = this.configService.llmSonnetModel;
-        break;
-      case 'anthropic.haiku_model':
-        raw = this.configService.llmHaikuModel;
-        break;
-      case 'model_tiers.opus':
-        raw = this.configService.opusModelPrefixes.join(', ');
-        break;
-      case 'model_tiers.sonnet':
-        raw = this.configService.sonnetModelPrefixes.join(', ');
-        break;
-      case 'model_tiers.haiku':
-        raw = this.configService.haikuModelPrefixes.join(', ');
-        break;
-      case 'server.port':
-        raw = this.configService.port;
-        break;
-      case 'llm.max_tokens.opus':
-        raw = this.configService.llmMaxTokensOpus;
-        break;
-      case 'llm.max_tokens.sonnet':
-        raw = this.configService.llmMaxTokensSonnet;
-        break;
-      case 'llm.max_tokens.haiku':
-        raw = this.configService.llmMaxTokensHaiku;
-        break;
-      case 'llm.thinking.opus_budget':
-        raw = this.configService.llmThinkingOpus;
-        break;
-      case 'llm.thinking.sonnet_budget':
-        raw = this.configService.llmThinkingSonnet;
-        break;
-      case 'llm.context_budget.opus':
-        raw = this.configService.llmContextBudgetOpus;
-        break;
-      case 'llm.context_budget.sonnet':
-        raw = this.configService.llmContextBudgetSonnet;
-        break;
-      case 'llm.context_budget.haiku':
-        raw = this.configService.llmContextBudgetHaiku;
-        break;
-      case 'llm.stream.timeout_ms':
-        raw = this.configService.llmStreamTimeoutMs;
-        break;
-      case 'npc.history_rounds':
-        raw = this.configService.npcHistoryRounds;
-        break;
-      default:
-        raw = '';
-    }
-
-    return item.type === 'number' ? Number(raw) : String(raw);
+    const raw = this.configService.getTomlValue(item.tomlPath) ?? '';
+    const result = item.type === 'number' ? Number(raw) : String(raw);
+    // 字符串值序列化时转义换行符
+    return typeof result === 'string' ? result.replace(/\n/g, '\\n') : result;
   }
 }

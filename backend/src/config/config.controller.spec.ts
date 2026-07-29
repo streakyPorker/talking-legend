@@ -2,7 +2,47 @@ import { describe, it, expect, vi } from 'vitest';
 import { ConfigController } from './config.controller.js';
 import { ConfigService } from './config.service.js';
 
+// PUT 测试需要模拟文件 I/O。vi.mock 提升到文件顶部，不影响 GET 测试（不读文件）。
+vi.mock('fs', () => ({
+  readFileSync: () =>
+    '[llm.max_tokens]\nopus = 40960\nsonnet = 5120\n' +
+    '[npc]\nhistory_rounds = 20\n' +
+    '[server]\nport = 4001\n' +
+    '[model_tiers]\nopus = ["claude-opus-4"]\n',
+  writeFileSync: () => {},
+  existsSync: () => true,
+  mkdirSync: () => {},
+  readdirSync: () => [],
+  statSync: () => ({ isDirectory: () => true }),
+  constants: {},
+  F_OK: 0,
+  R_OK: 4,
+  W_OK: 2,
+  X_OK: 1,
+}));
+
 // ── 辅助 ─────────────────────────────────────────────────────────
+
+/** 默认 mock 值 */
+const DEFAULT_TOML_VALUES: Record<string, string | number> = {
+  'anthropic.opus_model': 'claude-opus-4-8',
+  'anthropic.sonnet_model': 'claude-sonnet-4-6',
+  'anthropic.haiku_model': 'claude-haiku-4-5-20251001',
+  'model_tiers.opus': 'claude-opus-4, deepseek-v4-pro',
+  'model_tiers.sonnet': 'claude-sonnet-4, deepseek-v4-flash',
+  'model_tiers.haiku': 'claude-haiku-4, deepseek-v4-lite',
+  'server.port': 4001,
+  'llm.max_tokens.opus': 40960,
+  'llm.max_tokens.sonnet': 5120,
+  'llm.max_tokens.haiku': 512,
+  'llm.thinking.opus_budget': 4096,
+  'llm.thinking.sonnet_budget': 2048,
+  'llm.context_budget.opus': 180000,
+  'llm.context_budget.sonnet': 50000,
+  'llm.context_budget.haiku': 8000,
+  'llm.stream.timeout_ms': 90000,
+  'npc.history_rounds': 20,
+};
 
 function createMockConfig(overrides: Partial<ConfigService> = {}): ConfigService {
   return {
@@ -25,6 +65,8 @@ function createMockConfig(overrides: Partial<ConfigService> = {}): ConfigService
     sonnetModelPrefixes: ['claude-sonnet-4', 'deepseek-v4-flash'],
     haikuModelPrefixes: ['claude-haiku-4', 'deepseek-v4-lite'],
     reloadToml: vi.fn(),
+    getTomlValue: vi.fn().mockImplementation((p: string) => DEFAULT_TOML_VALUES[p]),
+    tomlPath: '/tmp/test-config.toml',
     ...overrides,
   } as unknown as ConfigService;
 }
@@ -85,13 +127,50 @@ describe('ConfigController — GET /api/config', () => {
   });
 
   it('读取 ConfigService 实际 getter 值', () => {
-    const svc = createMockConfig({ llmMaxTokensOpus: 99999 });
+    const svc = createMockConfig({
+      llmMaxTokensOpus: 99999,
+      getTomlValue: vi.fn().mockImplementation((p: string) => {
+        if (p === 'llm.max_tokens.opus') return 99999;
+        return DEFAULT_TOML_VALUES[p];
+      }),
+    });
     const ctrl = new ConfigController(svc);
     const res = ctrl.getConfig();
 
     const sec = res.sections.find((s) => s.key === 'llm.max_tokens')!;
     const item = sec.items.find((i) => i.key === 'opus')!;
     expect(item.value).toBe(99999);
+  });
+
+  it('password 类型返回 ****', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+
+    // 通过 getConfig 间接验证: 当前 schema 没有 password item，
+    // 但架构师未来添加时不会泄露；
+    // 这里用私有方法反射验证密码守卫已就位
+    const passwordItem = {
+      key: 'api_key',
+      tomlPath: 'anthropic.api_key' as const,
+      label: 'API Key',
+      type: 'password' as const,
+      hotReload: false,
+      readonly: false,
+    };
+    type Ctrl = { resolveValue(item: typeof passwordItem): string | number };
+    const value = (ctrl as unknown as Ctrl).resolveValue(passwordItem);
+    expect(value).toBe('****');
+  });
+
+  it('response 中 readonly 字段正确返回', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+    const res = ctrl.getConfig();
+
+    const sec = res.sections.find((s) => s.key === 'model_tiers')!;
+    for (const item of sec.items) {
+      expect(item.readonly).toBe(true);
+    }
   });
 });
 
@@ -120,10 +199,46 @@ describe('ConfigController — PUT /api/config', () => {
     const ctrl = new ConfigController(svc);
     const res = ctrl.updateConfig({ changes: { 'llm.max_tokens.opus': 80000 } });
 
-    // 验证响应结构包含 required 字段
     expect(res).toHaveProperty('applied');
     expect(res).toHaveProperty('restartRequired');
     expect(res).toHaveProperty('errors');
+  });
+
+  it('只读字段拒绝写入并返回错误', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+    const res = ctrl.updateConfig({ changes: { 'model_tiers.opus': 'new-value' } });
+
+    expect(res.errors).toContain('model_tiers.opus: is readonly');
+    expect(res.applied).toEqual([]);
+  });
+
+  it('浮点数写入整数字段返回错误', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+    const res = ctrl.updateConfig({ changes: { 'server.port': 1234.5 } });
+
+    expect(res.errors).toContain('server.port: must be an integer');
+    expect(res.applied).toEqual([]);
+  });
+
+  it('无效类型（boolean）写入返回错误', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+    const res = ctrl.updateConfig({ changes: { 'llm.max_tokens.opus': true as unknown as number } });
+
+    expect(res.errors).toContain('llm.max_tokens.opus: value must be a string or number');
+    expect(res.applied).toEqual([]);
+  });
+
+  it('errors 非空且 applied 为空时不触发写入', () => {
+    const svc = createMockConfig();
+    const ctrl = new ConfigController(svc);
+    const res = ctrl.updateConfig({ changes: { 'unknown.path': 'val' } });
+
+    expect(res.errors.length).toBeGreaterThan(0);
+    expect(res.applied).toEqual([]);
+    expect(svc.reloadToml).not.toHaveBeenCalled();
   });
 });
 

@@ -17,17 +17,17 @@ export class ConfigService {
   // ── 优先级: process.env > settings.json > config.toml > 默认值 ──
 
   /** 按 TOML 路径读取值（如 "anthropic.opus_model"）→ env → settings → toml → default */
-  private get(path: string, envKey: string, defaultVal: string): string {
+  private get(tomlPath: string, envKey: string, defaultVal: string): string {
     if (process.env[envKey]) return process.env[envKey]!;
     const sv = this.settings?.env?.[envKey];
     if (sv) return sv;
-    const tv = this.tomlGet(path);
+    const tv = this.tomlGet(tomlPath);
     if (tv) return tv;
     return defaultVal;
   }
 
-  private getNum(path: string, envKey: string, defaultVal: number): number {
-    return Number(this.get(path, envKey, String(defaultVal)));
+  private getNum(tomlPath: string, envKey: string, defaultVal: number): number {
+    return Number(this.get(tomlPath, envKey, String(defaultVal)));
   }
 
   /** dot-path 读取嵌套 TOML 值 */
@@ -123,8 +123,7 @@ export class ConfigService {
 
   /** 重新从 config.toml 加载配置（热加载用） */
   reloadToml(): void {
-    const tomlPath = path.resolve(__dirname, '..', '..', '..', 'config.toml');
-    this.loadToml(tomlPath);
+    this.loadToml(this.tomlPath);
   }
 
   // ── private ───────────────────────────────────────────────────
@@ -152,8 +151,7 @@ export class ConfigService {
       this.settings = null;
       this.logger.warn('settings.json not found, skeleton mode');
     }
-    // 2. config.toml
-    const tomlPath = path.resolve(__dirname, '..', '..', '..', 'config.toml');
-    this.loadToml(tomlPath);
+    // 2. config.toml（复用 this.tomlPath）
+    this.loadToml(this.tomlPath);
   }
 }
