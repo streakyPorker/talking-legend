@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **快速上手**：本文档是项目的"最新快照"——每个 RFC 完工后同步更新。新会话 `/init` 时，读本文档 + 几次 `codegraph_explore` 搜索关键符号 + 查看 RFC 进度表，即可掌握项目全貌，无需大量读文件。
 >
-> **Agent 模型约定**：探索类 agent（Explore）使用 `sonnet` 模型——性价比最优，足以覆盖代码搜索和架构理解场景。
+> **Agent 模型约定**：
+> - 探索类（Explore）→ `sonnet`。性价比最优，足覆盖代码搜索和架构理解。
+> - 实现类（Implement）→ 并行 `sonnet` agent，文件级隔离（两两不修改同一文件），翻 Wave 依赖。**硬性要求：agent 输出必须零编译错误、零 import 断裂、零未定义引用**——接手即可 typecheck + build 通过。
+> - 审查类（Review）→ 并行 `sonnet` agent，从不同视角对抗审视（功能正确性/回归安全/代码质量）。
+> - 验收类 → Playwright 深度体验（多页面截图 + 交互验证）。
+> - 测试策略 → 现阶段不做回归测试，第一个大版本发布后再考虑。
+>
+> **交互约定**：grill-me 设计访谈使用 `AskUserQuestion` 工具提问，提供推荐选项和理由，让用户做选择题而非开放问答。
 
 ## Commands
 

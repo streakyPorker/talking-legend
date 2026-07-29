@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { GameSetup } from './components/GameSetup.js';
-import { GameScreen } from './components/GameScreen.js';
-import { ConfigScreen } from './components/ConfigScreen.js';
+import { GameSetup } from './components/game/GameSetup.js';
+import { GameScreen } from './components/game/GameScreen.js';
+import { ConfigScreen } from './components/config/ConfigScreen.js';
 
 export function App() {
   const [showConfig, setShowConfig] = useState(false);
