@@ -89,6 +89,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 010 | 前端组件化重构 | P2 | 已提议 |
 | 011 | 前端SSE与NPC对话面板 | P2 | 已提议 |
 | 012 | 集成测试与验收 | P3 | 已提议 |
+| 015 | 前端导航栏重构（侧边栏→顶部导航） | P1 | 已提议 |
 
 ### 完工铁律（RFC & Bugfix 通用）
 
