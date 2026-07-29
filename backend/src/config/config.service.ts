@@ -82,6 +82,8 @@ export class ConfigService {
   get llmContextBudgetSonnet(): number { return this.getNum('llm.context_budget.sonnet', 'LLM_CONTEXT_BUDGET_SONNET', 50000); }
   get llmContextBudgetHaiku(): number  { return this.getNum('llm.context_budget.haiku', 'LLM_CONTEXT_BUDGET_HAIKU', 8000); }
 
+  get npcHistoryRounds(): number  { return this.getNum('npc.history_rounds', 'NPC_HISTORY_ROUNDS', 20); }
+
   // 路径
   get dbPath(): string      { return this.get('db.path', 'DB_PATH', path.join(process.cwd(), 'data', 'talking-legend.db')); }
   get gameDataDir(): string { return path.join(process.cwd(), 'data', 'games'); }
@@ -89,6 +91,12 @@ export class ConfigService {
   get worldsDir(): string {
     if (process.env.WORLDS_DIR) return process.env.WORLDS_DIR;
     return path.resolve(__dirname, '..', '..', '..', 'worlds');
+  }
+
+  /** 重新从 config.toml 加载配置（热加载用） */
+  reloadToml(): void {
+    const tomlPath = path.resolve(__dirname, '..', '..', '..', 'config.toml');
+    this.loadToml(tomlPath);
   }
 
   // ── private ───────────────────────────────────────────────────
