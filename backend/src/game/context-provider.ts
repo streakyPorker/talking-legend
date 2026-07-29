@@ -20,14 +20,17 @@ import { WorldConfigService } from '../world-config/world-config.service';
 import { NarrativeService } from './narrative.service';
 import type { ContextModule, AssembledContext } from '../context/context-module.interface';
 import type { NarrativeHistory, NarrativeEntry } from '../context/narrative-history';
-import { GMContextBuilder } from '../context/context-builder';
+import { GMContextBuilder, NpcContextBuilder } from '../context/context-builder';
 import {
   WorldStateModule,
   PlayerStateModule,
   NarrativeHistoryModule,
   ActiveEventsModule,
   ScenarioHintModule,
+  NpcPersonaModule,
+  NpcMemoryModule,
 } from '../context/modules';
+import type { ClassifiedMemory } from '../context/memory-filter';
 
 @Injectable()
 export class ContextProvider {
@@ -127,6 +130,108 @@ export class ContextProvider {
 
     // ── 3. 交由 GMContextBuilder 组装 ────────────────────────
     const builder = new GMContextBuilder(modules);
+    return builder.build(gameId, budget);
+  }
+
+  /**
+   * 为 NPC 对话调用组装完整上下文。
+   *
+   * 模块组合：npc_persona(强制) + npc_memory + world_state(强制) + narrative_history + player_state
+   *
+   * @param gameId   游戏 ID
+   * @param npcId    NPC ID
+   * @param budget   token 预算上限（如 50000 for Sonnet）
+   * @returns        AssembledContext（含 systemPrompt + tokenEstimate）
+   */
+  async buildNpcContext(gameId: string, npcId: string, budget: number): Promise<AssembledContext> {
+    // ── 1. 读取 DB 数据 ──────────────────────────────────────
+    const world = this.worldRepo.findByGameId(gameId);
+    const npc = this.npcRepo.findById(npcId);
+    if (!npc) throw new Error(`NPC not found: ${npcId}`);
+
+    const player = this.playerRepo.findByGameId(gameId);
+    const storyline = this.storylineRepo.findByGameId(gameId);
+
+    // WorldConfig 按 world.name 匹配
+    const worldCfg = world
+      ? this.worldConfig.getWorld(world.name)
+      : undefined;
+
+    // NarrativeService 返回格式化文本，需转换为 NarrativeHistory
+    const narrativeText = this.narrativeService.getRecentHistory(gameId);
+
+    // ── 2. 创建模块实例 + setData 注入 ─────────────────────
+
+    const modules = new Map<string, ContextModule>();
+
+    // npc_persona（强制）
+    const personaModule = new NpcPersonaModule();
+    personaModule.setData({
+      npcName: npc.name,
+      npcRole: npc.role,
+      npcLocation: npc.location,
+      npcPersonality: npc.personality,
+      npcMood: npc.currentMood,
+    });
+    modules.set('npc_persona', personaModule);
+
+    // npc_memory（非强制）— 从 string[] 转为 ClassifiedMemory[]
+    const rawMemories = this.npcRepo.getMemories(npcId);
+    const classified: ClassifiedMemory[] = rawMemories.map((content, i) => ({
+      id: i,
+      npcId,
+      content,
+      turn: 0,
+      tier: 'normal' as const,
+      createdAt: '',
+    }));
+    const memoryModule = new NpcMemoryModule();
+    memoryModule.setData({ memories: classified });
+    modules.set('npc_memory', memoryModule);
+
+    // world_state（强制）— 注入完整世界描述+区域详情+NPC
+    const npcs = this.npcRepo.findByGameId(gameId);
+    const worldModule = new WorldStateModule();
+    worldModule.setData({
+      timeOfDay: world?.timeOfDay ?? '清晨',
+      weather: world?.weather ?? '晴朗',
+      currentRegion: world?.currentRegion ?? '未知',
+      currentRegionName: worldCfg?.regions?.find((r) => r.id === world?.currentRegion)?.name ?? '',
+      worldDescription: worldCfg?.description ?? world?.description ?? '',
+      regions: (world?.regions ?? []).map((r) => {
+        const cfg = worldCfg?.regions?.find((c) => c.id === r.id);
+        return { id: r.id, name: cfg?.name ?? r.name, description: cfg?.description ?? r.description };
+      }),
+      npcs: (npcs ?? []).map((n) => ({
+        name: n.name,
+        role: n.role,
+        personality: n.personality,
+        location: n.location,
+        mood: n.currentMood,
+      })),
+    });
+    modules.set('world_state', worldModule);
+
+    // narrative_history（非强制）
+    const historyModule = new NarrativeHistoryModule();
+    historyModule.setData({
+      history: narrativeText ? parseNarrativeHistory(narrativeText) : undefined,
+    });
+    modules.set('narrative_history', historyModule);
+
+    // player_state（非强制）
+    const playerModule = new PlayerStateModule();
+    playerModule.setData({
+      playerName: player?.name ?? '未知',
+      playerLocation: player?.location ?? '未知',
+      inventory: player?.inventory ?? [],
+      reputation: player?.reputation ?? {},
+      quests: player?.quests ?? [],
+    });
+    modules.set('player_state', playerModule);
+
+    // ── 3. 交由 NpcContextBuilder 组装 ────────────────────────
+    const builder = new NpcContextBuilder(modules);
     return builder.build(gameId, budget);
   }
 }
