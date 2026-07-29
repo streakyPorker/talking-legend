@@ -19,6 +19,9 @@ interface ConfigItem {
   label: string;
   type: 'text' | 'number' | 'password';
   hotReload: boolean;
+  min?: number;
+  max?: number;
+  readonly?: boolean;
 }
 
 interface ConfigSection {
@@ -44,9 +47,9 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '模型层级前缀',
     restartRequired: true,
     items: [
-      { key: 'opus', tomlPath: 'model_tiers.opus', label: 'Opus 前缀', type: 'text', hotReload: false },
-      { key: 'sonnet', tomlPath: 'model_tiers.sonnet', label: 'Sonnet 前缀', type: 'text', hotReload: false },
-      { key: 'haiku', tomlPath: 'model_tiers.haiku', label: 'Haiku 前缀', type: 'text', hotReload: false },
+      { key: 'opus', tomlPath: 'model_tiers.opus', label: 'Opus 前缀', type: 'text', hotReload: false, readonly: true },
+      { key: 'sonnet', tomlPath: 'model_tiers.sonnet', label: 'Sonnet 前缀', type: 'text', hotReload: false, readonly: true },
+      { key: 'haiku', tomlPath: 'model_tiers.haiku', label: 'Haiku 前缀', type: 'text', hotReload: false, readonly: true },
     ],
   },
   {
@@ -54,7 +57,7 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '服务器',
     restartRequired: true,
     items: [
-      { key: 'port', tomlPath: 'server.port', label: '端口', type: 'number', hotReload: false },
+      { key: 'port', tomlPath: 'server.port', label: '端口', type: 'number', hotReload: false, min: 1, max: 65535 },
     ],
   },
   {
@@ -62,9 +65,9 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: 'Token 预算 (max_tokens)',
     restartRequired: false,
     items: [
-      { key: 'opus', tomlPath: 'llm.max_tokens.opus', label: 'Opus', type: 'number', hotReload: true },
-      { key: 'sonnet', tomlPath: 'llm.max_tokens.sonnet', label: 'Sonnet', type: 'number', hotReload: true },
-      { key: 'haiku', tomlPath: 'llm.max_tokens.haiku', label: 'Haiku', type: 'number', hotReload: true },
+      { key: 'opus', tomlPath: 'llm.max_tokens.opus', label: 'Opus', type: 'number', hotReload: true, min: 1, max: 200000 },
+      { key: 'sonnet', tomlPath: 'llm.max_tokens.sonnet', label: 'Sonnet', type: 'number', hotReload: true, min: 1, max: 200000 },
+      { key: 'haiku', tomlPath: 'llm.max_tokens.haiku', label: 'Haiku', type: 'number', hotReload: true, min: 1, max: 200000 },
     ],
   },
   {
@@ -72,8 +75,8 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: 'Extended Thinking',
     restartRequired: false,
     items: [
-      { key: 'opus_budget', tomlPath: 'llm.thinking.opus_budget', label: 'Opus budget', type: 'number', hotReload: true },
-      { key: 'sonnet_budget', tomlPath: 'llm.thinking.sonnet_budget', label: 'Sonnet budget', type: 'number', hotReload: true },
+      { key: 'opus_budget', tomlPath: 'llm.thinking.opus_budget', label: 'Opus budget', type: 'number', hotReload: true, min: 0, max: 32000 },
+      { key: 'sonnet_budget', tomlPath: 'llm.thinking.sonnet_budget', label: 'Sonnet budget', type: 'number', hotReload: true, min: 0, max: 32000 },
     ],
   },
   {
@@ -81,9 +84,9 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '上下文预算',
     restartRequired: false,
     items: [
-      { key: 'opus', tomlPath: 'llm.context_budget.opus', label: 'Opus', type: 'number', hotReload: true },
-      { key: 'sonnet', tomlPath: 'llm.context_budget.sonnet', label: 'Sonnet', type: 'number', hotReload: true },
-      { key: 'haiku', tomlPath: 'llm.context_budget.haiku', label: 'Haiku', type: 'number', hotReload: true },
+      { key: 'opus', tomlPath: 'llm.context_budget.opus', label: 'Opus', type: 'number', hotReload: true, min: 1000, max: 1000000 },
+      { key: 'sonnet', tomlPath: 'llm.context_budget.sonnet', label: 'Sonnet', type: 'number', hotReload: true, min: 1000, max: 1000000 },
+      { key: 'haiku', tomlPath: 'llm.context_budget.haiku', label: 'Haiku', type: 'number', hotReload: true, min: 1000, max: 1000000 },
     ],
   },
   {
@@ -91,7 +94,7 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: '流式超时',
     restartRequired: false,
     items: [
-      { key: 'timeout_ms', tomlPath: 'llm.stream.timeout_ms', label: '超时 (ms)', type: 'number', hotReload: true },
+      { key: 'timeout_ms', tomlPath: 'llm.stream.timeout_ms', label: '超时 (ms)', type: 'number', hotReload: true, min: 5000, max: 300000 },
     ],
   },
   {
@@ -99,7 +102,7 @@ const CONFIG_SCHEMA: ConfigSection[] = [
     label: 'NPC 对话',
     restartRequired: false,
     items: [
-      { key: 'history_rounds', tomlPath: 'npc.history_rounds', label: '历史轮数', type: 'number', hotReload: true },
+      { key: 'history_rounds', tomlPath: 'npc.history_rounds', label: '历史轮数', type: 'number', hotReload: true, min: 1, max: 100 },
     ],
   },
 ];
@@ -275,6 +278,21 @@ export class ConfigController {
       if (value === undefined || value === null) {
         errors.push(`${dotPath}: value is required`);
         continue;
+      }
+
+      // 白名单校验：只允许 schema 中声明的 dotPath
+      const item = itemByTomlPath.get(dotPath);
+      if (!item) {
+        errors.push(`${dotPath}: not in config schema`);
+        continue;
+      }
+
+      // 数字范围校验
+      if (item.type === 'number') {
+        const num = Number(value);
+        if (isNaN(num)) { errors.push(`${dotPath}: must be a number`); continue; }
+        if (item.min !== undefined && num < item.min) { errors.push(`${dotPath}: min ${item.min}`); continue; }
+        if (item.max !== undefined && num > item.max) { errors.push(`${dotPath}: max ${item.max}`); continue; }
       }
 
       let parsed: { section: string; keyName: string };

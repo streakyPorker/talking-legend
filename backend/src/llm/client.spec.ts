@@ -17,6 +17,8 @@ function createMockConfig(overrides: Partial<ConfigService> = {}): ConfigService
     llmMaxTokensHaiku: 512,
     llmThinkingOpus: 4096,
     llmThinkingSonnet: 2048,
+    opusModelPrefixes: [],
+    sonnetModelPrefixes: [],
     ...overrides,
   } as ConfigService;
 }
