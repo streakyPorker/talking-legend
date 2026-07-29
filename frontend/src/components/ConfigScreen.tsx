@@ -78,7 +78,13 @@ export function ConfigScreen({ onClose }: Props) {
   const handleChange = useCallback(
     (section: ConfigSection, item: ConfigItem, newValue: string) => {
       const key = dotKey(section, item);
-      const parsedValue = item.type === 'number' ? Number(newValue) : newValue;
+      let parsedValue: string | number = newValue;
+      if (item.type === 'number') {
+        if (newValue === '') return; // ignore empty number input
+        const n = Number(newValue);
+        if (isNaN(n)) return;
+        parsedValue = n;
+      }
       const initial = initialValues[key];
 
       setDirty((prev) => {
@@ -247,9 +253,12 @@ export function ConfigScreen({ onClose }: Props) {
                             <input
                               id={key}
                               type={item.type === 'number' ? 'number' : 'text'}
-                              className={`input input-bordered w-full ${isDirty ? 'input-warning' : ''}`}
+                              className={`input input-bordered w-full ${isDirty ? 'input-warning' : ''} ${item.readonly ? 'input-disabled' : ''}`}
                               value={currentValue}
                               onChange={(e) => handleChange(section, item, e.target.value)}
+                              disabled={item.readonly}
+                              min={item.min}
+                              max={item.max}
                             />
                           </div>
                         );

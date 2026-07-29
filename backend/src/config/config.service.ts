@@ -93,6 +93,34 @@ export class ConfigService {
     return path.resolve(__dirname, '..', '..', '..', 'worlds');
   }
 
+  /** config.toml 文件绝对路径（供 Controller 使用） */
+  get tomlPath(): string { return path.resolve(__dirname, '..', '..', '..', 'config.toml'); }
+
+  /** 通用 getter：按 tomlPath 返回当前值（供 ConfigController.resolveValue 使用） */
+  getTomlValue(tomlPath: string): string | number | undefined {
+    const map: Record<string, () => string | number> = {
+      'anthropic.opus_model': () => this.llmOpusModel,
+      'anthropic.sonnet_model': () => this.llmSonnetModel,
+      'anthropic.haiku_model': () => this.llmHaikuModel,
+      'model_tiers.opus': () => (this.opusModelPrefixes ?? []).join(', '),
+      'model_tiers.sonnet': () => (this.sonnetModelPrefixes ?? []).join(', '),
+      'model_tiers.haiku': () => (this.haikuModelPrefixes ?? []).join(', '),
+      'server.port': () => this.port,
+      'llm.max_tokens.opus': () => this.llmMaxTokensOpus,
+      'llm.max_tokens.sonnet': () => this.llmMaxTokensSonnet,
+      'llm.max_tokens.haiku': () => this.llmMaxTokensHaiku,
+      'llm.thinking.opus_budget': () => this.llmThinkingOpus,
+      'llm.thinking.sonnet_budget': () => this.llmThinkingSonnet,
+      'llm.context_budget.opus': () => this.llmContextBudgetOpus,
+      'llm.context_budget.sonnet': () => this.llmContextBudgetSonnet,
+      'llm.context_budget.haiku': () => this.llmContextBudgetHaiku,
+      'llm.stream.timeout_ms': () => this.llmStreamTimeoutMs,
+      'npc.history_rounds': () => this.getNum('npc.history_rounds', 'NPC_HISTORY_ROUNDS', 20),
+    };
+    const getter = map[tomlPath];
+    return getter ? getter() : undefined;
+  }
+
   /** 重新从 config.toml 加载配置（热加载用） */
   reloadToml(): void {
     const tomlPath = path.resolve(__dirname, '..', '..', '..', 'config.toml');

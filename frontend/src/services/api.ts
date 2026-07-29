@@ -64,6 +64,9 @@ export interface ConfigItem {
   value: string | number;
   type: 'text' | 'number';
   hotReload: boolean;
+  readonly?: boolean;
+  min?: number;
+  max?: number;
 }
 
 export interface ConfigSection {

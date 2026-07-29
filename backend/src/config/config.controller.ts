@@ -120,6 +120,9 @@ interface GetConfigResponse {
       value: string | number;
       type: string;
       hotReload: boolean;
+      readonly: boolean;
+      min?: number;
+      max?: number;
     }>;
   }>;
 }
@@ -232,6 +235,9 @@ export class ConfigController {
         value: this.resolveValue(item),
         type: item.type,
         hotReload: item.hotReload,
+        readonly: item.readonly ?? false,
+        min: item.min,
+        max: item.max,
       })),
     }));
 
@@ -251,7 +257,7 @@ export class ConfigController {
       return { applied: [], restartRequired: [], errors: [] };
     }
 
-    const tomlPath = path.resolve(__dirname, '..', '..', '..', 'config.toml');
+    const tomlPath = this.configService.tomlPath;
     let lines: string[];
 
     try {
@@ -275,7 +281,7 @@ export class ConfigController {
 
     for (const dotPath of dotPaths) {
       const value = changes[dotPath];
-      if (value === undefined || value === null) {
+      if (value === undefined || value === null || typeof value === 'boolean') {
         errors.push(`${dotPath}: value is required`);
         continue;
       }
