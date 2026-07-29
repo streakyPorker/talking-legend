@@ -55,3 +55,49 @@ export async function performActionStream(
   }
   return response.body.getReader();
 }
+
+// === Config Center Types & API ===
+
+export interface ConfigItem {
+  key: string;
+  label: string;
+  value: string | number;
+  type: 'text' | 'number';
+  hotReload: boolean;
+}
+
+export interface ConfigSection {
+  key: string;
+  label: string;
+  restartRequired: boolean;
+  items: ConfigItem[];
+}
+
+export interface GetConfigResponse {
+  sections: ConfigSection[];
+}
+
+export interface UpdateConfigRequest {
+  changes: Record<string, string | number>;
+}
+
+export interface UpdateConfigResponse {
+  applied: string[];
+  restartRequired: string[];
+  errors: string[];
+}
+
+/** 读取全部配置 */
+export async function getConfig(): Promise<GetConfigResponse> {
+  return request<GetConfigResponse>('/config');
+}
+
+/** 更新部分配置项 */
+export async function updateConfig(
+  changes: Record<string, string | number>,
+): Promise<UpdateConfigResponse> {
+  return request<UpdateConfigResponse>('/config', {
+    method: 'PUT',
+    body: JSON.stringify({ changes } satisfies UpdateConfigRequest),
+  });
+}
