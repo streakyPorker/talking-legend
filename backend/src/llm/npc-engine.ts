@@ -65,8 +65,8 @@ export class NpcEngine {
         model: this.llmClient.sonnetModel,
         systemPrompt: ctx.systemPrompt,
         userPrompt,
-        maxTokens: 1024,
         temperature: 0.9,
+        messages: history,
       })) {
         if (event.type === 'chunk') {
           fullText += event.content;
@@ -75,7 +75,8 @@ export class NpcEngine {
           apiUsage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('[NpcEngine] LLM stream failed:', (err as Error).message || err);
       const fallback = this.fallbackDialogue(npc.name);
       fullText = fallback;
       yield { type: 'chunk', content: fallback };

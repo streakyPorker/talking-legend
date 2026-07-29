@@ -230,6 +230,13 @@ export class ContextProvider {
     });
     modules.set('player_state', playerModule);
 
+    // active_events（非强制）
+    const eventsModule2 = new ActiveEventsModule();
+    eventsModule2.setData({
+      events: storyline?.activeEvents ?? [],
+    });
+    modules.set('active_events', eventsModule2);
+
     // ── 3. 交由 NpcContextBuilder 组装 ────────────────────────
     const builder = new NpcContextBuilder(modules);
     return builder.build(gameId, budget);
