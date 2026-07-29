@@ -60,6 +60,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 005 | LLM接入：GM引擎与SSE | P1 | 已完成 |
 | 013 | LLM思考链支持 | P0 | 已完成 |
 | 006 | LLM接入：NPC对话 | P1 | 已完成 |
+| 014 | 配置中心页面 | P0 | 进行中 |
 | 007 | LLM接入：意图分类与事件触发 | P1 | 已提议 |
 | 008 | 世界自主演化系统 | P1 | 已提议 |
 | 009 | 事件链引擎 | P2 | 已提议 |
