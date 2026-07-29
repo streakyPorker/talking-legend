@@ -22,10 +22,16 @@ export function ConfigScreen({ onClose }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveResult, setSaveResult] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; type: 'success' | 'error'; message: string }[]>([]);
+
+  // 添加 toast 通知，3 秒后自动消失
+  const addToast = useCallback((type: 'success' | 'error', message: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  }, []);
 
   // 构建 dot-path
   const dotKey = useCallback((section: ConfigSection, item: ConfigItem): string => {
@@ -54,7 +60,9 @@ export function ConfigScreen({ onClose }: Props) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : '加载配置失败');
+        const msg = err instanceof Error ? err.message : '加载配置失败';
+        setLoadError(msg);
+        addToast('error', msg);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -107,21 +115,17 @@ export function ConfigScreen({ onClose }: Props) {
   // 保存
   const handleSave = async () => {
     if (Object.keys(dirty).length === 0) {
-      setSaveResult({ type: 'success', message: '没有需要保存的变更' });
+      addToast('success', '没有需要保存的变更');
       return;
     }
 
     setIsSaving(true);
-    setSaveResult(null);
 
     try {
       const result = await updateConfig(dirty);
 
       if (result.errors.length > 0) {
-        setSaveResult({
-          type: 'error',
-          message: `保存部分失败：${result.errors.join('；')}`,
-        });
+        addToast('error', `保存部分失败：${result.errors.join('；')}`);
         return;
       }
 
@@ -135,12 +139,9 @@ export function ConfigScreen({ onClose }: Props) {
       const parts: string[] = [];
       if (hotCount > 0) parts.push(`${hotCount} 项已热生效`);
       if (restartItemCount > 0) parts.push(`${restartItemCount} 项需重启后端`);
-      setSaveResult({ type: 'success', message: parts.join(' · ') });
+      addToast('success', parts.join(' · '));
     } catch (err: unknown) {
-      setSaveResult({
-        type: 'error',
-        message: err instanceof Error ? err.message : '保存配置失败',
-      });
+      addToast('error', err instanceof Error ? err.message : '保存配置失败');
     } finally {
       setIsSaving(false);
     }
@@ -168,177 +169,174 @@ export function ConfigScreen({ onClose }: Props) {
   };
 
   return (
-    <div
-      className="modal modal-open"
-      role="dialog"
-      aria-modal="true"
-      aria-label="配置中心"
-      onClick={handleBackdropClick}
-    >
-      <div className="modal-box max-w-2xl">
-        {/* 标题栏 */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">{'⚙'} 配置中心</h2>
-          <button
-            className="btn btn-ghost btn-sm btn-square"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            {'✕'}
-          </button>
+    <>
+      {/* Toast 通知容器 — 右上角固定 */}
+      {toasts.length > 0 && (
+        <div className="toast toast-top toast-end z-[100]">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`alert ${t.type === 'success' ? 'alert-success' : 'alert-error'}`}
+            >
+              <span>{t.message}</span>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* 加载中 */}
-        {isLoading && (
-          <div className="flex justify-center py-8">
-            <span className="loading loading-spinner loading-lg" />
+      <div
+        className="modal modal-open"
+        role="dialog"
+        aria-modal="true"
+        aria-label="配置中心"
+        onClick={handleBackdropClick}
+      >
+        <div className="modal-box max-w-2xl">
+          {/* 标题栏 */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">{'⚙'} 配置中心</h2>
+            <button
+              className="btn btn-ghost btn-sm btn-square"
+              onClick={onClose}
+              aria-label="关闭"
+            >
+              {'✕'}
+            </button>
           </div>
-        )}
 
-        {/* 加载错误 */}
-        {!isLoading && loadError && (
-          <div className="alert alert-error mb-4">
-            <span>{loadError}</span>
-          </div>
-        )}
-
-        {/* 配置项 */}
-        {!isLoading && !loadError && (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-            {sections.map((section) => {
-              const sectionDirtyCount = section.items.filter((item) => {
-                const key = dotKey(section, item);
-                return key in dirty;
-              }).length;
-
-              return (
-                <details
-                  key={section.key}
-                  className="collapse collapse-arrow bg-base-200"
-                  open
-                >
-                  <summary className="collapse-title text-lg font-medium">
-                    <span>{section.label}</span>
-                    {sectionDirtyCount > 0 && (
-                      <span className="badge badge-info badge-sm ml-2">
-                        {sectionDirtyCount}
-                      </span>
-                    )}
-                    {section.restartRequired && (
-                      <span className="badge badge-warning badge-sm ml-2">
-                        需重启
-                      </span>
-                    )}
-                  </summary>
-                  <div className="collapse-content">
-                    <div className="space-y-3">
-                      {section.items.map((item) => {
-                        const key = dotKey(section, item);
-                        const currentValue = displayValue(section, item);
-                        const isDirty = key in dirty;
-
-                        return (
-                          <div key={key} className="form-control w-full">
-                            <label className="label" htmlFor={key}>
-                              <span className="label-text flex items-center gap-1">
-                                {item.label}
-                                {item.hotReload && (
-                                  <span className="badge badge-success badge-xs text-[10px]">
-                                    {'\u{1F525}'}
-                                  </span>
-                                )}
-                                {!item.hotReload && (
-                                  <span className="badge badge-warning badge-xs text-[10px]">
-                                    {'⚠'}需重启
-                                  </span>
-                                )}
-                              </span>
-                            </label>
-                            <input
-                              id={key}
-                              type={item.type === 'number' ? 'number' : 'text'}
-                              className={`input input-bordered w-full ${isDirty ? 'input-warning' : ''} ${item.readonly ? 'input-disabled' : ''}`}
-                              value={currentValue}
-                              onChange={(e) => handleChange(section, item, e.target.value)}
-                              disabled={item.readonly}
-                              min={item.min}
-                              max={item.max}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </details>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 保存结果提示 */}
-        {saveResult && (
-          <div
-            className={`alert mt-4 ${
-              saveResult.type === 'success' ? 'alert-success' : 'alert-error'
-            }`}
-          >
-            <span>{saveResult.message}</span>
-            {saveResult.type === 'success' && dirtyKeys.length === 0 && (
-              <button className="btn btn-sm btn-ghost" onClick={onClose}>
-                关闭
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* 底部操作栏 */}
-        <div className="modal-action flex-col items-stretch gap-2">
-          {/* 变更摘要 */}
-          {dirtyKeys.length > 0 && (
-            <p className="text-sm text-base-content/70 text-center">
-              {dirtyKeys.length} 项变更 {'·'} {hotReloadCount} 项热生效
-              {restartCount > 0 && ` · ${restartCount} 项需重启后端`}
-            </p>
+          {/* 加载中 */}
+          {isLoading && (
+            <div className="flex justify-center py-8">
+              <span className="loading loading-spinner loading-lg" />
+            </div>
           )}
 
-          <div className="flex gap-2 justify-end">
-            <button
-              className="btn btn-ghost btn-warning"
-              onClick={async () => {
-                if (!confirm('确定恢复所有配置项为默认值？此操作不可撤销。')) return;
-                try {
-                  const r = await resetConfig();
-                  setSaveResult({ type: r.success ? 'success' : 'error', message: r.message });
-                  if (r.success) {
-                    setDirty({});
-                    const data = await getConfig();
-                    const init: Record<string, string | number> = {};
-                    for (const s of data.sections) for (const i of s.items) init[dotKey(s, i)] = i.value;
-                    setInitialValues(init);
-                    setSections(data.sections);
+          {/* 加载错误 — 改用 toast 显示 */}
+
+          {/* 配置项 */}
+          {!isLoading && !loadError && (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+              {sections.map((section) => {
+                const sectionDirtyCount = section.items.filter((item) => {
+                  const key = dotKey(section, item);
+                  return key in dirty;
+                }).length;
+
+                return (
+                  <details
+                    key={section.key}
+                    className="collapse collapse-arrow bg-base-200"
+                    open
+                  >
+                    <summary className="collapse-title text-lg font-medium">
+                      <span>{section.label}</span>
+                      {sectionDirtyCount > 0 && (
+                        <span className="badge badge-info badge-sm ml-2">
+                          {sectionDirtyCount}
+                        </span>
+                      )}
+                      {section.restartRequired && (
+                        <span className="badge badge-warning badge-sm ml-2">
+                          需重启
+                        </span>
+                      )}
+                    </summary>
+                    <div className="collapse-content">
+                      <div className="space-y-3">
+                        {section.items.map((item) => {
+                          const key = dotKey(section, item);
+                          const currentValue = displayValue(section, item);
+                          const isDirty = key in dirty;
+
+                          return (
+                            <div key={key} className="form-control w-full">
+                              <label className="label" htmlFor={key}>
+                                <span className="label-text flex items-center gap-1">
+                                  {item.label}
+                                  {item.hotReload && (
+                                    <span className="badge badge-success badge-xs text-[10px]">
+                                      {'\u{1F525}'}
+                                    </span>
+                                  )}
+                                  {!item.hotReload && (
+                                    <span className="badge badge-warning badge-xs text-[10px]">
+                                      {'⚠'}需重启
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                              <input
+                                id={key}
+                                type={item.type === 'number' ? 'number' : 'text'}
+                                className={`input input-bordered w-full ${isDirty ? 'input-warning' : ''} ${item.readonly ? 'input-disabled' : ''}`}
+                                value={currentValue}
+                                onChange={(e) => handleChange(section, item, e.target.value)}
+                                disabled={item.readonly}
+                                min={item.min}
+                                max={item.max}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 保存结果提示 — 改用 toast 显示 */}
+
+          {/* 底部操作栏 */}
+          <div className="modal-action flex-col items-stretch gap-2">
+            {/* 变更摘要 */}
+            {dirtyKeys.length > 0 && (
+              <p className="text-sm text-base-content/70 text-center">
+                {dirtyKeys.length} 项变更 {'·'} {hotReloadCount} 项热生效
+                {restartCount > 0 && ` · ${restartCount} 项需重启后端`}
+              </p>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <button
+                className="btn btn-ghost btn-warning"
+                onClick={async () => {
+                  if (!confirm('确定恢复所有配置项为默认值？此操作不可撤销。')) return;
+                  try {
+                    const r = await resetConfig();
+                    addToast(r.success ? 'success' : 'error', r.message);
+                    if (r.success) {
+                      setDirty({});
+                      const data = await getConfig();
+                      const init: Record<string, string | number> = {};
+                      for (const s of data.sections) for (const i of s.items) init[dotKey(s, i)] = i.value;
+                      setInitialValues(init);
+                      setSections(data.sections);
+                    }
+                  } catch (err: unknown) {
+                    addToast('error', err instanceof Error ? err.message : '恢复失败');
                   }
-                } catch (err: unknown) {
-                  setSaveResult({ type: 'error', message: err instanceof Error ? err.message : '恢复失败' });
-                }
-              }}
-              disabled={isSaving}
-            >
-              恢复默认
-            </button>
-            <button className="btn btn-ghost" onClick={onClose} disabled={isSaving}>
-              取消
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleSave}
-              disabled={isSaving || dirtyKeys.length === 0}
-            >
-              {isSaving && <span className="loading loading-spinner" />}
-              保存配置
-            </button>
+                }}
+                disabled={isSaving}
+              >
+                恢复默认
+              </button>
+              <button className="btn btn-ghost" onClick={onClose} disabled={isSaving}>
+                取消
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={isSaving || dirtyKeys.length === 0}
+              >
+                {isSaving && <span className="loading loading-spinner" />}
+                保存配置
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
