@@ -12,6 +12,7 @@ import type { AssembledContext } from '../context/context-module.interface';
 import { LlmLogRepository } from '../db/repositories/llm-log.repository';
 import { NarrativeService } from '../game/narrative.service';
 import { ContextProvider } from '../game/context-provider';
+import { ToolRegistry } from './tool-registry';
 import { GM_NARRATIVE_USER_PARAMS } from '../prompts/schemas/gm/narrative.schema';
 
 // ─── 事件类型 ──────────────────────────────────────────────
@@ -30,6 +31,7 @@ export class GMEngine {
     private readonly contextProvider: ContextProvider,
     @Inject(LlmLogRepository) private readonly llmLogRepo: LlmLogRepository,
     private readonly narrativeService: NarrativeService,
+    private readonly toolRegistry: ToolRegistry,
   ) {}
 
   async *generate(
@@ -116,6 +118,122 @@ export class GMEngine {
       tokenEstimate: ctx.tokenEstimate,
       ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}),
     };
+  }
+
+  async *generateWithTools(
+    gameId: string,
+    action: string,
+    target: string | undefined,
+    turn: number,
+  ): AsyncIterable<GMStreamEvent | { type: 'tool_call'; name: string; args: Record<string, unknown> } | { type: 'tool_result'; success: boolean; message: string; stateChanges?: Record<string, unknown> }> {
+    const startTime = Date.now();
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
+    // Build context same as generate()
+    let ctx: AssembledContext;
+    try {
+      ctx = await this.contextProvider.buildGMContext(gameId, 180_000);
+    } catch {
+      yield { type: 'chunk', content: this.fallbackNarrative(action) };
+      yield { type: 'done', turn, tokenEstimate: 0 };
+      return;
+    }
+
+    const userParams: Record<string, string> = {
+      playerAction: action,
+      target: target ?? '无',
+    };
+    const userPrompt = this.templateEngine.render('gm.narrative.user', userParams, GM_NARRATIVE_USER_PARAMS);
+
+    // Build messages array for multi-turn tool use loop
+    const messages: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = [
+      { role: 'user', content: userPrompt },
+    ];
+
+    let finalTurn = turn;
+    let consecutiveFailures = 0;
+    let fullText = '';
+    let apiUsage: { inputTokens: number; outputTokens: number } | null = null;
+    const tools = this.toolRegistry.getToolsForLLM();
+
+    // Tool use loop
+    while (true) {
+      let hasToolUse = false;
+
+      try {
+        for await (const event of this.llmClient.stream({
+          model: this.llmClient.opusModel,
+          systemPrompt: ctx.systemPrompt,
+          userPrompt: '', // not used when messages present
+          maxTokens: 8192,
+          messages: messages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          })),
+          tools: tools.length > 0 ? tools : undefined,
+        })) {
+          if (event.type === 'chunk') {
+            fullText += event.content;
+            yield { type: 'chunk', content: event.content };
+          } else if (event.type === 'tool_use') {
+            hasToolUse = true;
+            yield { type: 'tool_call', name: event.name, args: event.input };
+
+            // Execute tool
+            const result = await this.toolRegistry.execute(event.name, gameId, event.input);
+            yield { type: 'tool_result', success: result.success, message: result.message, stateChanges: result.stateChanges };
+
+            if (result.success) {
+              consecutiveFailures = 0;
+              if (result.stateChanges?.gameState) {
+                const gs = result.stateChanges.gameState as Record<string, unknown>;
+                if (typeof gs.turn === 'number') finalTurn = gs.turn;
+              }
+            } else {
+              consecutiveFailures++;
+            }
+
+            // Inject tool use + result into messages
+            messages.push({
+              role: 'assistant',
+              content: [{ type: 'tool_use', id: event.id, name: event.name, input: event.input }],
+            });
+            messages.push({
+              role: 'user',
+              content: [{ type: 'tool_result', tool_use_id: event.id, content: result.message }],
+            });
+          } else if (event.type === 'usage') {
+            apiUsage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+          }
+        }
+      } catch (err) {
+        const fallback = this.fallbackNarrative(action);
+        fullText = fallback;
+        yield { type: 'chunk', content: fallback };
+        break;
+      }
+
+      // Stop conditions
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        yield { type: 'chunk', content: '\n\n（多次操作失败，行动被迫中断。）' };
+        break;
+      }
+      if (!hasToolUse) break; // LLM chose not to use tools, natural end
+    }
+
+    // Log and persist (same as generate())
+    const latencyMs = Date.now() - startTime;
+    try {
+      this.llmLogRepo.insert({
+        gameId, callType: 'gm_narrative', model: this.llmClient.opusModel,
+        promptTokens: apiUsage?.inputTokens ?? ctx.tokenEstimate,
+        completionTokens: apiUsage?.outputTokens ?? Math.ceil(fullText.length / 2),
+        latencyMs, costUsd: 0,
+      });
+    } catch { /* silent */ }
+    try { this.narrativeService.append(gameId, finalTurn, fullText); } catch { /* silent */ }
+
+    yield { type: 'done', turn: finalTurn, tokenEstimate: ctx.tokenEstimate, ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}) };
   }
 
   private fallbackNarrative(action: string): string {

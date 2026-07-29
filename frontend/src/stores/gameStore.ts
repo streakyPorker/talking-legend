@@ -10,6 +10,7 @@ interface GameStore {
   narrative: string[];
   addPlayerAction: (action: string) => void;
   appendNarrativeChunk: (chunk: string) => void;
+  addToolResult: (message: string) => void;
   clearNarrative: () => void;
 }
 
@@ -31,5 +32,7 @@ export const useGameStore = create<GameStore>((set) => ({
       lines[lines.length - 1] = (lines[lines.length - 1] || '') + chunk;
       return { narrative: lines };
     }),
+  addToolResult: (message) =>
+    set((s) => ({ narrative: [...s.narrative, `[系统] ${message}`] })),
   clearNarrative: () => set({ narrative: [] }),
 }));

@@ -15,6 +15,7 @@ export const DEFAULT_MODULE_CONFIG: Record<CallType, ModuleConfig> = {
       { name: 'narrative_history', mandatory: false },
       { name: 'active_events', mandatory: false },
       { name: 'scenario_hint', mandatory: false },
+      { name: 'travel_history', mandatory: false },
     ],
   },
   npc_dialogue: {

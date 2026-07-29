@@ -2,6 +2,7 @@ import type {
   APIResponse,
   CreateGameResponse,
   GameActionResponse,
+  GameState,
 } from '@talking-legend/shared';
 
 const API_BASE = '/api';
@@ -114,5 +115,18 @@ export async function updateConfig(
     body: JSON.stringify({ changes }),
   });
   if (!res.ok) throw new Error(`Failed to update config: ${res.status}`);
+  return res.json();
+}
+
+export async function moveToRegion(
+  gameId: string,
+  targetRegion: string,
+): Promise<{ success: boolean; data: { success: boolean; message: string; narrative: string; gameState: GameState } }> {
+  const res = await fetch(`${API_BASE}/game/${gameId}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetRegion }),
+  });
+  if (!res.ok) throw new Error('移动失败');
   return res.json();
 }

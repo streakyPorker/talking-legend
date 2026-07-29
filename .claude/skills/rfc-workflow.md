@@ -3,7 +3,26 @@
 ## 阶段总览
 
 ```
-提议 → 设计(grill-me深度访谈) → 审查加固(Sonnet并行) → 实现(并行agent) → 验证 → 归档
+提议 → 设计(grill-me深度访谈) → 审查加固(Sonnet并行) → 实现(并行agent+UT) → 验证 → 归档
+```
+
+## 大需求流程（含 tool call / 多 agent 联动 / 全栈变更）
+
+适用场景：RFC 涉及前后端 + DB + LLM 多层变更，必须 grill-me 闭合所有决策后再动手。
+
+```
+Phase 0: 提案 + grill-me (用户明确要求时) → 所有决策闭合 → 用户审视 design.md
+Phase 1: 并行 Sonnet 开发 → 文件级隔离 + UT
+Phase 2: 门禁 (typecheck + build + test) → 修复
+Phase 3: 并行 Sonnet 审查 (功能/回归/质量) → 修复 🔴🟡
+Phase 4: 再测试 2 轮
+  第1轮: typecheck + build + test → 全量通过
+  第2轮: 审查 UT 有效性（删无用、补覆盖）+ 重跑 → 全量通过
+Phase 5: 判断是否进入 Playwright 集成测试
+  ├── 否 → Phase 1 重新修 bug → Phase 4 再 2 轮
+  └── 是 → Phase 6
+Phase 6: 3 轮并行深度 Playwright 测试 → 报告 → 反馈修复
+Phase 7: 呈现总结果 + 归档
 ```
 
 ---
@@ -57,17 +76,27 @@
 **流程**：
 1. 从 design.md §文件变更清单提取任务，确保文件级隔离
 2. 按依赖关系分 Wave：
-   - Wave 1：无依赖的基础层（store、utils、共享 UI 组件）
-   - Wave 2：依赖 Wave 1 的中间层（hooks、游戏子组件）
-   - Wave 3：集成层（父组件重写、路由更新）
+   - Wave 1：无依赖的基础层（store、utils、新建文件）
+   - Wave 2：依赖 Wave 1 的中间层（修改现有文件）
+   - Wave 3：集成层（前端组件、路由更新）
 3. 每个 Wave 内所有 agent **并行派发**（同一 Wave 内文件零交集）
-4. Wave 完成后立即 `typecheck + test` 验证，再进入下一 Wave
+4. **Wave 间质量门禁**（必做，不可跳过）：
+   - `typecheck` 零错误 + `build` 编译通过
+   - 涉及跨 Wave 的关键 UT 通过（不要求全量回归）
+   - 门禁不过 → 修复 → 重新验证 → 才进入下一 Wave
+5. Wave 完成后立即验证，再进入下一 Wave
 5. 审查 agent 发现的问题修复后，须再次验证 `typecheck + build` 通过
 6. 每个 agent 提示词包含：
    - 必读文件列表 + 任务伪代码 + 约束
    - **显式要求**：只写文件，不验证——主线程统一验证
 
 **测试策略**：现阶段不做回归测试。第一个大版本发布后统一建立回归测试体系。
+
+**TDD 要求**（后端 UT 必做）：
+1. 先定义接口/方法签名 → 写 UT（覆盖全部操作链路）
+2. UT 在实现前必须**失败**（红阶段）——验证测试有效
+3. 实现代码后 UT **全部通过**（绿阶段）
+4. 至少一半的 UT 遵循此 TDD 流程，不允许全量后补测试
 
 **agent 提示词模板**：
 ```

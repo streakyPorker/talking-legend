@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
 import type Database from 'better-sqlite3';
 import type {
   CreateGameRequest,
@@ -11,6 +11,7 @@ import type {
   NPCState,
   PlayerState,
   WorldState,
+  MoveResult,
 } from '@talking-legend/shared';
 import { DB_INSTANCE } from '../db/tokens';
 import { GameRepository } from '../db/repositories/game.repository';
@@ -19,12 +20,35 @@ import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
 import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
+import { WorldService } from '../world/world.service';
 import { GMEngine } from '../llm/gm-engine';
+import { TravelLogRepository } from '../db/repositories/travel-log.repository';
 import { v4 as uuidv4 } from '../utils/id';
 
 @Injectable()
 export class GameService {
   private readonly activeGenerations = new Set<string>();
+
+  private getGameState(gameId: string): GameState {
+    const storedGame = this.gameRepo.findById(gameId);
+    if (!storedGame) {
+      throw new NotFoundException(`Game not found: ${gameId}`);
+    }
+    const world = this.worldRepo.findByGameId(gameId);
+    const npcs = this.npcRepo.findByGameId(gameId);
+    const player = this.playerRepo.findByGameId(gameId);
+    if (!world || !player) {
+      throw new Error('Game state incomplete');
+    }
+    return {
+      id: gameId,
+      world,
+      npcs,
+      player,
+      turn: storedGame.turn,
+      phase: storedGame.phase,
+    };
+  }
 
   constructor(
     @Inject(DB_INSTANCE) private readonly db: Database.Database,
@@ -35,6 +59,8 @@ export class GameService {
     @Inject(StorylineRepository) private readonly storylineRepo: StorylineRepository,
     @Inject(WorldConfigService) private readonly worldConfig: WorldConfigService,
     @Inject(GMEngine) private readonly gmEngine: GMEngine,
+    @Inject(forwardRef(() => WorldService)) private readonly worldService: WorldService,
+    @Inject(TravelLogRepository) private readonly travelLogRepo: TravelLogRepository,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
@@ -165,6 +191,36 @@ export class GameService {
     return { narrative, npcResponses, worldChanges, updatedState };
   }
 
+  async moveToRegion(gameId: string, targetRegion: string, trigger: 'click' | 'dialogue' = 'click'): Promise<MoveResult> {
+    // Delegate to WorldService for data operation
+    const result = await this.worldService.moveToRegion(gameId, targetRegion);
+
+    // Get current game state for turn number
+    const game = this.gameRepo.findById(gameId);
+    const currentTurn = game?.turn ?? 0;
+
+    // Record travel
+    try {
+      this.travelLogRepo.insert({
+        gameId,
+        fromRegion: result.fromRegion,
+        toRegion: targetRegion,
+        turn: currentTurn,
+        trigger,
+      });
+    } catch { /* silent */ }
+
+    // Re-read full game state
+    const gameState = await this.getGameState(gameId);
+
+    return {
+      success: true,
+      message: `前往${targetRegion}`,
+      narrative: result.narrative,
+      gameState,
+    };
+  }
+
   async *performActionStream(
     gameId: string,
     action: string,
@@ -203,9 +259,19 @@ export class GameService {
       })();
 
       // Phase 2: GMEngine generate
-      const generator = this.gmEngine.generate(gameId, action, target, snapshot.turn);
+      const generator = this.gmEngine.generateWithTools(gameId, action, target, snapshot.turn);
       for await (const event of generator) {
-        yield JSON.stringify(event);
+        if (event.type === 'chunk') {
+          yield JSON.stringify(event);
+        } else if (event.type === 'done') {
+          yield JSON.stringify(event);
+        } else if (event.type === 'tool_call') {
+          yield JSON.stringify({ type: 'tool_call', name: event.name, args: event.args });
+        } else if (event.type === 'tool_result') {
+          yield JSON.stringify({ type: 'tool_result', success: event.success, message: event.message, stateChanges: event.stateChanges });
+        } else {
+          yield JSON.stringify(event);
+        }
       }
     } finally {
       this.activeGenerations.delete(gameId);

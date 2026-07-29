@@ -10,6 +10,7 @@ export function useGameAction() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toolToast, setToolToast] = useState<{ message: string } | null>(null);
 
   const execute = useCallback(
     async (actionText: string) => {
@@ -55,6 +56,17 @@ export function useGameAction() {
               }).catch(() => {});
             } else if (data.type === 'error') {
               setError(data.message);
+            } else if (data.type === 'tool_call') {
+              // Set tool toast — show "正在前往..."
+              setToolToast({ message: `正在前往${data.args?.target ?? '...'}…` });
+            } else if (data.type === 'tool_result') {
+              setToolToast(null);
+              if (data.success && data.stateChanges?.gameState) {
+                const gs = data.stateChanges.gameState;
+                useGameStore.getState().setGameState(gs);
+                // Also append tool result message to narrative
+                useGameStore.getState().addToolResult(data.message);
+              }
             }
           }
         }
@@ -67,5 +79,5 @@ export function useGameAction() {
     [gameState, isLoading, addPlayerAction, appendNarrativeChunk, updateTurn],
   );
 
-  return { execute, isLoading, error };
+  return { execute, isLoading, error, toolToast };
 }

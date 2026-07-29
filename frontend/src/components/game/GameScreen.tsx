@@ -31,7 +31,7 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
     }
   }, [gameState, navigate]);
 
-  const { execute, isLoading, error } = useGameAction();
+  const { execute, isLoading, error, toolToast } = useGameAction();
 
   if (!gameState) {
     return null;
@@ -40,6 +40,12 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
   return (
     <div className="min-h-screen flex flex-col">
       <GameHeader onOpenConfig={onOpenConfig} />
+      {toolToast && (
+        <div className="alert alert-info rounded-none border-0 text-sm py-2">
+          <span className="loading loading-spinner loading-xs"></span>
+          {toolToast.message}
+        </div>
+      )}
       <main className="flex-1 flex gap-4 p-6 overflow-hidden">
         <NarrativePanel isLoading={isLoading} error={error} />
         <RegionSidebar />

@@ -75,8 +75,9 @@ describe('GMContextBuilder', () => {
     const historyMod = new MockModule('narrative_history', false, 'HISTORY_CONTENT');
     const eventsMod = new MockModule('active_events', false, 'EVENTS_CONTENT');
     const hintMod = new MockModule('scenario_hint', false, 'HINT_CONTENT');
+    const travelMod = new MockModule('travel_history', false, 'TRAVEL_CONTENT');
 
-    const registry = makeRegistry([worldMod, playerMod, historyMod, eventsMod, hintMod]);
+    const registry = makeRegistry([worldMod, playerMod, historyMod, eventsMod, hintMod, travelMod]);
     const builder = new GMContextBuilder(registry);
 
     const result = await builder.build('game-1', 10000);
@@ -163,7 +164,8 @@ describe('Trim / budget handling', () => {
     const eventsMod = new MockModule('active_events', false, 'EVENTS');       // ~3 tokens
     const hintMod = new MockModule('scenario_hint', false, 'HINT');           // ~2 tokens
 
-    const registry = makeRegistry([worldMod, playerMod, historyMod, eventsMod, hintMod]);
+    const travelMod = new MockModule('travel_history', false, 'TRAVEL');
+    const registry = makeRegistry([worldMod, playerMod, historyMod, eventsMod, hintMod, travelMod]);
     const builder = new GMContextBuilder(registry);
 
     // Budget: mandatory(50) + 4 optionals(200+4+3+2=209) = 259 (full)
@@ -182,7 +184,8 @@ describe('Trim / budget handling', () => {
     const historyMod = new MockModule('narrative_history', false, 'H');
     const eventsMod = new MockModule('active_events', false, 'E');
     const hintMod = new MockModule('scenario_hint', false, 'S');
-    const registry = makeRegistry([hugeMod, playerMod, historyMod, eventsMod, hintMod]);
+    const travelMod = new MockModule('travel_history', false, 'T');
+    const registry = makeRegistry([hugeMod, playerMod, historyMod, eventsMod, hintMod, travelMod]);
     const builder = new GMContextBuilder(registry);
 
     await expect(builder.build('game-1', 100)).rejects.toThrow(
@@ -197,7 +200,8 @@ describe('Trim / budget handling', () => {
     const opt3 = new MockModule('active_events', false, 'W'.repeat(200), 'WWW', 'W');
     const opt4 = new MockModule('scenario_hint', false, 'V'.repeat(200), 'VVV', 'V');
 
-    const registry = makeRegistry([hugeMandatory, opt1, opt2, opt3, opt4]);
+    const opt5 = new MockModule('travel_history', false, 'U');
+    const registry = makeRegistry([hugeMandatory, opt1, opt2, opt3, opt4, opt5]);
     const builder = new GMContextBuilder(registry);
 
     // mandatory ~300 + 4 optionals at minimal ~1 each → ~304

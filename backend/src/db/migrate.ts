@@ -131,6 +131,24 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: 'travel_log',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS travel_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          game_id TEXT NOT NULL,
+          from_region TEXT NOT NULL,
+          to_region TEXT NOT NULL,
+          turn INTEGER NOT NULL,
+          trigger TEXT NOT NULL DEFAULT 'click',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_travel_log_game ON travel_log(game_id);
+      `);
+    },
+  },
 ];
 
 /**

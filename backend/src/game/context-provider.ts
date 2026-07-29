@@ -16,6 +16,7 @@ import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
 import { StorylineRepository } from '../db/repositories/storyline.repository';
+import { TravelLogRepository } from '../db/repositories/travel-log.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
 import { NarrativeService } from './narrative.service';
 import type { ContextModule, AssembledContext } from '../context/context-module.interface';
@@ -30,6 +31,7 @@ import {
   NpcPersonaModule,
   NpcMemoryModule,
 } from '../context/modules';
+import { TravelHistoryModule } from '../context/modules/travel-history.module';
 import type { ClassifiedMemory } from '../context/memory-filter';
 
 @Injectable()
@@ -42,6 +44,7 @@ export class ContextProvider {
     @Inject(StorylineRepository) private readonly storylineRepo: StorylineRepository,
     @Inject(WorldConfigService) private readonly worldConfig: WorldConfigService,
     @Inject(NarrativeService) private readonly narrativeService: NarrativeService,
+    @Inject(TravelLogRepository) private readonly travelLogRepo: TravelLogRepository,
   ) {}
 
   /**
@@ -84,12 +87,20 @@ export class ContextProvider {
         const cfg = worldCfg?.regions?.find((c) => c.id === r.id);
         return { id: r.id, name: cfg?.name ?? r.name, description: cfg?.description ?? r.description };
       }),
+      connectedRegions: (world?.regions ?? [])
+        .filter((r) => world?.regions.find((x) => x.id === world?.currentRegion)?.connectedRegions?.includes(r.id))
+        .map((r) => ({
+          id: r.id,
+          name: worldCfg?.regions?.find((c) => c.id === r.id)?.name ?? r.name,
+          description: worldCfg?.regions?.find((c) => c.id === r.id)?.description ?? r.description,
+        })),
       npcs: (npcs ?? []).map((n) => ({
         name: n.name,
         role: n.role,
         personality: n.personality,
         location: n.location,
         mood: n.currentMood,
+        isNearby: n.location === world?.currentRegion,
       })),
     });
     modules.set('world_state', worldModule);
@@ -127,6 +138,10 @@ export class ContextProvider {
       hint: gmHint ?? '无特殊指引。',
     });
     modules.set('scenario_hint', hintModule);
+
+    // travel_history（非强制）
+    const travelModule = new TravelHistoryModule(this.travelLogRepo);
+    modules.set('travel_history', travelModule);
 
     // ── 3. 交由 GMContextBuilder 组装 ────────────────────────
     const builder = new GMContextBuilder(modules);
@@ -202,12 +217,20 @@ export class ContextProvider {
         const cfg = worldCfg?.regions?.find((c) => c.id === r.id);
         return { id: r.id, name: cfg?.name ?? r.name, description: cfg?.description ?? r.description };
       }),
+      connectedRegions: (world?.regions ?? [])
+        .filter((r) => world?.regions.find((x) => x.id === world?.currentRegion)?.connectedRegions?.includes(r.id))
+        .map((r) => ({
+          id: r.id,
+          name: worldCfg?.regions?.find((c) => c.id === r.id)?.name ?? r.name,
+          description: worldCfg?.regions?.find((c) => c.id === r.id)?.description ?? r.description,
+        })),
       npcs: (npcs ?? []).map((n) => ({
         name: n.name,
         role: n.role,
         personality: n.personality,
         location: n.location,
         mood: n.currentMood,
+        isNearby: n.location === world?.currentRegion,
       })),
     });
     modules.set('world_state', worldModule);

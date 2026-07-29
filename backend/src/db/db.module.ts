@@ -7,6 +7,7 @@ import { NpcRepository } from './repositories/npc.repository';
 import { PlayerRepository } from './repositories/player.repository';
 import { StorylineRepository } from './repositories/storyline.repository';
 import { LlmLogRepository } from './repositories/llm-log.repository';
+import { TravelLogRepository } from './repositories/travel-log.repository';
 
 export interface DbModuleConfig {
   dbPath: string;
@@ -21,6 +22,7 @@ const REPOSITORIES = [
   PlayerRepository,
   StorylineRepository,
   LlmLogRepository,
+  TravelLogRepository,
 ] as const;
 
 @Global()

@@ -126,3 +126,27 @@ export interface GameActionResponse {
   worldChanges: WorldEvolutionResponse;
   updatedState: GameState;
 }
+
+// === RFC-016: 地域移动 ===
+
+export interface MoveRequest {
+  targetRegion: string;
+}
+
+export interface MoveResult {
+  success: boolean;
+  message: string;
+  narrative: string;
+  gameState: GameState;
+}
+
+export interface ToolCallEvent {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface ToolResultEvent {
+  success: boolean;
+  message: string;
+  stateChanges?: { gameState?: GameState };
+}

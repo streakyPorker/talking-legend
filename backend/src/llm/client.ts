@@ -27,6 +27,7 @@ export interface LLMCallOptions {
   temperature?: number;
   maxTokens?: number;
   thinkingBudget?: number;
+  tools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
 }
 
 export interface LLMCallResult {
@@ -40,6 +41,7 @@ export interface LLMCallResult {
 
 export type StreamChunk =
   | { type: 'chunk'; content: string }
+  | { type: 'tool_use'; name: string; id: string; input: Record<string, unknown> }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
   | { type: 'stream_end' };
 
@@ -151,6 +153,7 @@ export class LLMClient {
             max_tokens: options.maxTokens ?? this.getDefaultMaxTokens(options.model),
             temperature: options.temperature ?? 0.7,
             ...(thinking !== undefined ? { thinking } : {}),
+            ...(options.tools?.length ? { tools: options.tools } : {}),
             stream: true,
           }),
           signal: controller.signal,
@@ -169,6 +172,8 @@ export class LLMClient {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // Track tool_use state across SSE events
+      let currentToolUse: { name: string; id: string; json: string } | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -190,17 +195,38 @@ export class LLMClient {
           }
 
           try {
-            const payload: SSEPayload = JSON.parse(jsonStr);
+            const payload: SSEPayload & {
+              content_block?: { type: string; name?: string; id?: string };
+              delta?: { type: string; text?: string; partial_json?: string };
+              message?: { stop_reason?: string };
+            } = JSON.parse(jsonStr);
 
             switch (payload.type) {
-              case 'content_block_start':
-                // A content block has started; record the block type
-                // for thinking blocks we simply note and continue
+              case 'content_block_start': {
+                const block = payload.content_block;
+                if (block?.type === 'tool_use') {
+                  // Flush any pending tool_use before starting a new block
+                  if (currentToolUse) {
+                    try {
+                      yield {
+                        type: 'tool_use',
+                        name: currentToolUse.name,
+                        id: currentToolUse.id,
+                        input: JSON.parse(currentToolUse.json),
+                      };
+                    } catch { /* skip malformed JSON */ }
+                    currentToolUse = null;
+                  }
+                  currentToolUse = { name: block.name ?? '', id: block.id ?? '', json: '' };
+                }
                 break;
+              }
 
               case 'content_block_delta': {
                 const delta = payload.delta;
-                if (delta?.type === 'text_delta' && delta.text) {
+                if (delta?.type === 'input_json_delta' && currentToolUse) {
+                  currentToolUse.json += delta.partial_json ?? '';
+                } else if (delta?.type === 'text_delta' && delta.text) {
                   yield { type: 'chunk', content: delta.text };
                 }
                 // thinking_delta: received but not yielded to caller
@@ -208,6 +234,18 @@ export class LLMClient {
               }
 
               case 'message_delta': {
+                // Flush pending tool_use before usage/stop info
+                if (currentToolUse) {
+                  try {
+                    yield {
+                      type: 'tool_use',
+                      name: currentToolUse.name,
+                      id: currentToolUse.id,
+                      input: JSON.parse(currentToolUse.json),
+                    };
+                  } catch { /* skip malformed JSON */ }
+                  currentToolUse = null;
+                }
                 const usage = payload.usage;
                 if (usage) {
                   yield {

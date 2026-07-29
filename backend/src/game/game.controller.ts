@@ -45,6 +45,15 @@ export class GameController {
     return { success: true, data: result };
   }
 
+  @Post(':id/move')
+  async move(
+    @Param('id') id: string,
+    @Body() body: { targetRegion: string },
+  ) {
+    const result = await this.gameService.moveToRegion(id, body.targetRegion, 'click');
+    return { success: true, data: result };
+  }
+
   @Post(':id/action/stream')
   async performActionStream(
     @Param('id') id: string,

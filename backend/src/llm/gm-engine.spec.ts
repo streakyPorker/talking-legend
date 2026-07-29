@@ -12,6 +12,7 @@ import type { AssembledContext } from '../context/context-module.interface';
 import type { LlmLogRepository, LlmLogEntry } from '../db/repositories/llm-log.repository';
 import type { NarrativeService } from '../game/narrative.service';
 import type { ContextProvider } from '../game/context-provider';
+import type { ToolRegistry } from './tool-registry';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ describe('GMEngine', () => {
   let mockContextProvider: ContextProvider;
   let mockLlmLogRepo: LlmLogRepository;
   let mockNarrativeService: NarrativeService;
+  let mockToolRegistry: ToolRegistry;
 
   beforeEach(() => {
     mockLlmClient = makeMockLlmClient();
@@ -92,6 +94,10 @@ describe('GMEngine', () => {
     mockContextProvider = makeMockContextProvider(buildMockContext());
     mockLlmLogRepo = makeMockLlmLogRepo();
     mockNarrativeService = makeMockNarrativeService();
+    mockToolRegistry = {
+      getToolsForLLM: vi.fn().mockReturnValue([]),
+      execute: vi.fn(),
+    } as unknown as ToolRegistry;
 
     engine = new GMEngine(
       mockLlmClient,
@@ -99,6 +105,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
   });
 
@@ -113,6 +120,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];
@@ -147,6 +155,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];
@@ -194,6 +203,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const events: Array<{ type: string }> = [];
@@ -224,6 +234,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const events: Array<{ type: string }> = [];
@@ -246,6 +257,7 @@ describe('GMEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const chunks: string[] = [];
@@ -297,6 +309,7 @@ describe('GMEngine', () => {
       failingCtxProvider,
       mockLlmLogRepo,
       mockNarrativeService,
+      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];
