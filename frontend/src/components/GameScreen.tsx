@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { GameState, Region } from '@talking-legend/shared';
 import { performActionStream } from '../services/api.js';
 
@@ -39,15 +40,30 @@ function renderMarkdown(text: string): React.ReactNode[] {
 }
 
 interface GameScreenProps {
-  gameState: GameState;
-  onGameUpdate: (state: GameState) => void;
+  onOpenConfig: () => void;
 }
 
-export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
+export function GameScreen({ onOpenConfig }: GameScreenProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initialGameState = (location.state as { gameState?: GameState } | null)?.gameState;
+
+  // 无状态则重定向回首页（用户刷新了游戏页面）
+  useEffect(() => {
+    if (!initialGameState) {
+      navigate('/', { replace: true });
+    }
+  }, [initialGameState, navigate]);
+
+  const [gameState, setGameState] = useState<GameState | null>(initialGameState ?? null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [narrative, setNarrative] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  if (!gameState) {
+    return null; // 等待重定向
+  }
 
   // 可到达区域
   const connected = gameState.world.regions.filter(
@@ -92,7 +108,7 @@ export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
             currentChunk += data.content;
             setNarrative((prev) => { const c = [...prev]; c[c.length - 1] = currentChunk; return c; });
           } else if (data.type === 'done') {
-            onGameUpdate({ ...gameState, turn: data.turn });
+            setGameState((prev) => prev ? { ...prev, turn: data.turn } : prev);
             fetch('/api/playtest/record', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ worldId: 'aethelgard', playerName: gameState.player.name, action: actionText, narrative: currentChunk, turn: data.turn, tokenEstimate: data.tokenEstimate }),
@@ -115,9 +131,18 @@ export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
     <div className="game-screen">
       <header className="game-header">
         <h1 className="game-world-name">{gameState.world.name}</h1>
-        <div className="game-info">
-          <span>{cn(gameState.world.currentRegion)} · 第 {gameState.turn} 回合</span>
-          <span>{timeCN(gameState.world.timeOfDay)} · {weatherCN(gameState.world.weather)}</span>
+        <div className="game-header-right">
+          <div className="game-info">
+            <span>{cn(gameState.world.currentRegion)} · 第 {gameState.turn} 回合</span>
+            <span>{timeCN(gameState.world.timeOfDay)} · {weatherCN(gameState.world.weather)}</span>
+          </div>
+          <button
+            onClick={onOpenConfig}
+            className="btn btn-ghost btn-circle text-2xl"
+            aria-label="打开配置"
+          >
+            ⚙
+          </button>
         </div>
       </header>
 
@@ -218,6 +243,7 @@ export function GameScreen({ gameState, onGameUpdate }: GameScreenProps) {
         .game-screen { min-height: 100vh; display: flex; flex-direction: column; }
         .game-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background: var(--color-surface); border-bottom: 1px solid var(--color-secondary); }
         .game-world-name { font-family: var(--font-main); color: var(--color-primary); font-size: 1.3rem; }
+        .game-header-right { display: flex; align-items: center; gap: 0.5rem; }
         .game-info { display: flex; gap: 1.5rem; color: var(--color-text-dim); font-size: 0.85rem; }
         .game-main { flex: 1; display: flex; gap: 1rem; padding: 1.5rem; overflow: hidden; }
         .narrative-panel { flex: 1; overflow-y: auto; padding-right: 1rem; }

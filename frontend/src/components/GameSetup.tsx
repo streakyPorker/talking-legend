@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from 'react';
-import type { GameState } from '@talking-legend/shared';
+import { useNavigate } from 'react-router-dom';
 import { createGame } from '../services/api.js';
 
 interface GameSetupProps {
-  onGameStart: (state: GameState) => void;
+  onOpenConfig: () => void;
 }
 
-export function GameSetup({ onGameStart }: GameSetupProps) {
+export function GameSetup({ onOpenConfig }: GameSetupProps) {
   const [playerName, setPlayerName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,7 +21,9 @@ export function GameSetup({ onGameStart }: GameSetupProps) {
 
     try {
       const result = await createGame(playerName.trim());
-      onGameStart(result.initialState);
+      navigate(`/game/${result.gameId}`, {
+        state: { gameState: result.initialState },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '无法开始游戏');
     } finally {
@@ -30,6 +33,15 @@ export function GameSetup({ onGameStart }: GameSetupProps) {
 
   return (
     <div className="game-setup">
+      {/* 配置齿轮 — 入口页右上角 */}
+      <button
+        onClick={onOpenConfig}
+        className="btn btn-ghost btn-circle text-2xl fixed top-3 right-3 z-50"
+        aria-label="打开配置"
+      >
+        ⚙
+      </button>
+
       <div className="setup-card">
         <h1 className="setup-title">传说之语</h1>
         <p className="setup-subtitle">

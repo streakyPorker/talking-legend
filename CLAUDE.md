@@ -2,9 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **快速上手**：本文档是项目的"最新快照"——每个 RFC 完工后同步更新。新会话 `/init` 时，读本文档 + 几次 `codegraph_explore` 搜索关键符号 + 查看 RFC 进度表，即可掌握项目全貌，无需大量读文件。
+>
+> **Agent 模型约定**：探索类 agent（Explore）使用 `sonnet` 模型——性价比最优，足以覆盖代码搜索和架构理解场景。
+
 ## Commands
 
-npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo root with `-w <workspace>`, or `cd` into the workspace.
+Requires Node.js >= 18. npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo root with `-w <workspace>`, or `cd` into the workspace.
 
 | Task | Command |
 |------|---------|
@@ -16,6 +20,8 @@ npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo ro
 | 热更新 | `bash dev.sh hot` — watch 编译 + 自动重启 |
 | 停止 | `bash dev.sh stop` |
 | Build all | `npm run build` — shared → backend → frontend |
+| 并发 dev（不删DB） | `npm run dev` — backend watch + frontend dev，跳过构建，保留数据库 |
+| Backend prod | `npm run start -w backend` — 运行已构建的 dist |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Test all | `npm test` |
@@ -25,8 +31,26 @@ npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo ro
 Backend gotchas:
 - Use the npm scripts only. Do NOT run via `tsx` (breaks NestJS decorator metadata) or `nest start` (workspace path issues) — see git history.
 - Compilation is SWC (`.swcrc`: legacy decorators + decorator metadata, CommonJS out); `tsc` is typecheck-only.
-- LLM config does NOT come from a `.env` file — `ConfigService` reads the `env` block of `~/.claude/settings.json` (`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`). Without it the backend logs "skeleton mode".
+- `bash dev.sh` (start/backend/restart/hot) **deletes `data/talking-legend.db`** on each run. Use `npm run dev` or `bash dev.sh frontend` to preserve data.
+- LLM config does NOT come from a `.env` file. Priority: `env var` > `~/.claude/settings.json` (env block) > `config.toml` > hardcoded defaults. Without it the backend logs "skeleton mode".
 - SQLite file lands at `<cwd>/data/talking-legend.db`; start the backend from `backend/` so data stays in `backend/data/`.
+
+## Config
+
+`config.toml` at repo root controls operational defaults — all values overridable by env vars:
+
+| Section | Key | Default |
+|---------|-----|---------|
+| `[server]` | `port` | `4001` |
+| `[anthropic]` | `base_url`, `opus_model`, `sonnet_model`, `haiku_model` | `api.anthropic.com`, claude-opus-4-8, etc. |
+| `[model_tiers]` | `opus`, `sonnet`, `haiku` | prefix lists — includes deepseek models |
+| `[llm.max_tokens]` | `opus` / `sonnet` / `haiku` | 40960 / 5120 / 512 |
+| `[llm.thinking]` | `opus_budget` / `sonnet_budget` | 4096 / 2048 |
+| `[llm.context_budget]` | `opus` / `sonnet` / `haiku` (chars) | 180000 / 50000 / 8000 |
+| `[llm.stream]` | `timeout_ms` | `90000` |
+| `[npc]` | `history_rounds` | `20` |
+
+`ConfigService.reloadToml()` supports hot-reload via the config controller. See `config.default.toml` for the full annotated template.
 
 ## Architecture
 
@@ -35,13 +59,13 @@ Backend gotchas:
 - **`backend/`** — NestJS 11 + better-sqlite3, global `/api` prefix. Module breakdown:
   - **Feature modules** (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository. Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests.
   - **`db/`** — `DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 8 data tables), and exports repositories + the `DB_INSTANCE` token. Multi-write ops run inside `db.transaction(...)`; turn bumps use optimistic concurrency. Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
-  - **`config/`** — `ConfigService` reads `env` block from `~/.claude/settings.json` (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL). No `.env` file is used. Without config the backend logs "skeleton mode".
-  - **`llm/`** — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Real LLM calls are mostly still TODO.
+  - **`config/`** (RFC-014) — Full NestJS module with `ConfigController` (GET/PUT `/api/config` for the config center page). `ConfigService` resolves values via priority chain: env var > settings.json > config.toml > hardcoded. Supports `reloadToml()` hot-reload without restart.
+  - **`llm/`** — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Key sub-components: `GMEngine` (GM narrative generation), `NpcEngine` (NPC dialogue), `LLMClient` (base HTTP client), `ThinkingHelper` (RFC-013 extended thinking budgets).
   - **`world-config/`** (RFC-003) — `WorldConfigService` loads world JSON from `worlds/` directory, validates against zod schemas, merges three sources (inline/single-file/directory), skips invalid worlds with `Logger.error`.
   - **`context/`** (RFC-004) — `ContextBuilder` assembles LLM context from pluggable modules (player-state, world-state, scenario-hint, npc-persona, npc-memory, narrative-history, active-events, intent-input). `MemoryFilter` prunes stale memories. `NarrativeHistory` manages the narrative log. Supports budget enforcement (`ContextBudgetError`).
-  - **`prompts/`** (RFC-004) — `TemplateEngine` renders prompt templates with `{{variable}}` interpolation. LLM prompt schemas for GM narrative, NPC dialogue, intent classification, and event trigger define expected JSON outputs.
+  - **`prompts/`** (RFC-004) — `TemplateEngine` renders prompt templates with `{{variable}}` interpolation. Templates live under `templates/`: `gm/narrative`, `npc/dialogue`, `intent/classify`, `event/trigger` — each with `system.md` + `user.md` defining expected JSON outputs.
   - **`utils/`** — `id.ts` (uuid generation), `narrative-log.ts` (file-based narrative storage alongside SQLite).
-- **`frontend/`** — React 18 + Vite. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand/Tailwind appear in design docs as the target stack but are NOT installed yet — trust `package.json`, not the design text.
+- **`frontend/`** — React 18 + Vite + TailwindCSS v4 + daisyUI 5. Vite dev server proxies `/api` → `http://localhost:4001`. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand appears in design docs but is NOT installed.
 
 Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__tests__/`), frontend `jsdom` + Testing Library (`src/test-setup.ts`).
 
@@ -58,7 +82,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 005 | LLM接入：GM引擎与SSE | P1 | 已完成 |
 | 013 | LLM思考链支持 | P0 | 已完成 |
 | 006 | LLM接入：NPC对话 | P1 | 已完成 |
-| 014 | 配置中心页面 | P0 | 进行中 |
+| 014 | 配置中心页面 | P0 | 已完成 |
 | 007 | LLM接入：意图分类与事件触发 | P1 | 已提议 |
 | 008 | 世界自主演化系统 | P1 | 已提议 |
 | 009 | 事件链引擎 | P2 | 已提议 |
@@ -66,11 +90,41 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 011 | 前端SSE与NPC对话面板 | P2 | 已提议 |
 | 012 | 集成测试与验收 | P3 | 已提议 |
 
-### RFC 完工铁律
+### 完工铁律（RFC & Bugfix 通用）
+
+**每次 RFC 完工**：
 1. `npm run dev` 成功启动，路由映射全部打印
 2. `curl` 调用核心 API 返回有效响应
 3. 非法请求返回结构化错误
 4. execution.md 粘贴启动日志 + API 响应
+5. **Playwright 中度体验**（必做）→ 检查关键体验问题：重叠、布局错乱、交互断裂、路由跳转异常；截图写入 execution.md
+6. **审视并更新 CLAUDE.md**（必做）→ 见下方"CLAUDE.md 维护清单"
+
+**每次 Bugfix 完工**：
+1. `npm test` 全量通过
+2. `npm run typecheck` 零错误
+3. `npm run build` 编译成功
+4. 验证脚本/手动测试确认 bug 已修复
+5. Bugfix 文件移至 `已修复/` 并写入结果
+6. **Playwright 中度体验**（涉及 UI 的修复必做）→ 确认修复后无新关键体验问题
+7. **审视并更新 CLAUDE.md**（必做）→ 见下方"CLAUDE.md 维护清单"
+
+**Playwright 中度体验清单**：
+- 入口页 (`/`)：布局正常，无重叠，输入框/按钮可用
+- 游戏页 (`/game/:id`)：header 不重叠，侧边栏可见，输入框可用
+- 配置面板：打开/关闭正常，各 section 可展开，保存/重置可操作
+- 路由跳转：`/` ↔ `/game/:id` 正确切换，URL 同步
+- 截图存入 execution.md 或 bugfix 文件
+
+**CLAUDE.md 维护清单**（RFC 和 Bugfix 完工后均须逐项确认）：
+- 新增/删除/重命名的模块、服务、引擎 → 更新 Architecture
+- 新增/变更的命令、npm scripts、dev.sh 行为 → 更新 Commands
+- 新增/变更的配置项、默认值 → 更新 Config
+- 新发现的 gotcha、反模式、注意事项 → 更新 Backend gotchas
+- RFC 进度表状态与实际 `rfcs/` 目录一致
+- 新增的可复用代码模式 → 更新 `.claude/skills/rfc-workflow.md` §可复用代码模式
+
+目标：每次变更后 CLAUDE.md 保持为项目"最新快照"，后续 `/init` 只需读 CLAUDE.md + 几次 codegraph 搜索即可掌握全貌。
 
 ## Git 纪律（提交前缀铁律）
 

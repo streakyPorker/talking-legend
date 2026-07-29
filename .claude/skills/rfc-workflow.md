@@ -87,10 +87,17 @@
 7. 证据写入 `execution.md`
 
 **前端 RFC 完工检查**：
-1. `tsc --noEmit` + `vitest run` 全通过
+1. `tsc --noEmit` + `npm test` 全通过
 2. `vite build` 构建成功
 3. 后端在跑时 `vite dev` 启动，浏览器不白屏
 4. 核心交互链路可走通
+
+**Playwright 中度体验**（所有 RFC 必做）：
+1. 导航到入口页 (`/`) → 截图：确认布局正常、无重叠、输入可用
+2. 创建/进入游戏页 (`/game/:id`) → 截图：确认 header/sidebar/输入框无关键体验问题
+3. 打开配置面板 → 截图：确认各 section 可展开、可编辑、保存/重置可用
+4. 路由跳转验证：`/` ↔ `/game/:id` URL 同步，前进/后退正常
+5. 截图写入 `execution.md`，标注发现的问题（如有）
 
 ---
 
@@ -100,8 +107,17 @@
 2. 更新 proposal.md / design.md 状态 → `已完成`
 3. 移动 RFC 目录：`正在进行/` → `已完成/`
 4. 更新 `CLAUDE.md` RFC 进度表
-5. Git commit: `docs(rfcNNN): RFC-XXX 归档`
-6. `git push`
+5. **审视并更新 CLAUDE.md**（必做，不可跳过）：
+   - 新增的模块/服务/引擎 → 写入 Architecture 对应子节
+   - 新增的命令/npm scripts → 写入 Commands 表
+   - 新增或变更的配置项 → 写入 Config 表
+   - 新发现的 gotcha/反模式 → 写入 Backend gotchas
+   - 新增的可复用代码模式 → 更新本 skill 的 §可复用代码模式
+   - 确认 RFC 进度表状态与 `rfcs/` 目录一致
+6. Git commit: `docs(rfcNNN): RFC-XXX 归档 — 同步 CLAUDE.md`
+7. `git push`
+
+**CLAUDE.md 更新原则**：目标是让后续 `/init` 只需读 CLAUDE.md + 几次 codegraph 搜索 + RFC 进度表，即可快速掌握项目全貌，不需要大量读文件。每次 RFC 完工后，CLAUDE.md 就是项目的"最新快照"。
 
 ---
 
@@ -155,7 +171,16 @@ bugfix/
 发现 bug → bugfix/待修复/BF-NNN.md
 开始修 → bugfix/修复中/BF-NNN.md（写入修改计划）
 修完验证 → bugfix/已修复/BF-NNN.md（写入结果+证据）
+          → 审视并更新 CLAUDE.md（必做，同 RFC 归档的 CLAUDE.md 维护清单）
 ```
+
+### Bugfix CLAUDE.md 维护
+Bugfix 完成后，逐项确认是否需要更新 CLAUDE.md：
+- 修复是否涉及模块/架构变更 → 更新 Architecture
+- 是否新增或修改了命令/脚本行为 → 更新 Commands
+- 是否涉及配置变更 → 更新 Config
+- 是否发现了值得记录的 gotcha → 更新 Backend gotchas
+- 是否产生了可复用的修复模式 → 更新本 skill 的 §可复用代码模式
 
 ### 提交前缀
 ```bash
