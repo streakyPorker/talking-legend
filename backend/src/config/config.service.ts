@@ -41,6 +41,22 @@ export class ConfigService {
     return node !== undefined ? String(node) : undefined;
   }
 
+  /** dot-path 读取 TOML 字符串数组 */
+  private tomlGetArray(dotPath: string): string[] {
+    const parts = dotPath.split('.');
+    let node: unknown = this.toml;
+    for (const p of parts) {
+      if (typeof node !== 'object' || node === null) return [];
+      node = (node as Record<string, unknown>)[p];
+    }
+    return Array.isArray(node) ? node.map(String) : [];
+  }
+
+  // ── 模型层级前缀（用于 LLMClient 自动识别模型能力） ──
+  get opusModelPrefixes(): string[]   { return this.tomlGetArray('model_tiers.opus'); }
+  get sonnetModelPrefixes(): string[] { return this.tomlGetArray('model_tiers.sonnet'); }
+  get haikuModelPrefixes(): string[]  { return this.tomlGetArray('model_tiers.haiku'); }
+
   // ── 公开 getter ──────────────────────────────────────────────
 
   get port(): number { return this.getNum('server.port', 'PORT', 4001); }

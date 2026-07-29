@@ -274,14 +274,18 @@ export class LLMClient {
     return this.config.llmMaxTokensHaiku;
   }
 
-  /** Check whether `model` string matches the configured Opus model tier */
+  /** Check whether `model` string matches the configured Opus tier (prefix match from config.toml [model_tiers]) */
   private isOpusModel(model: string): boolean {
-    return model === this.config.llmOpusModel;
+    const prefixes = this.config.opusModelPrefixes;
+    if (prefixes.length > 0) return prefixes.some((p) => model.includes(p));
+    return model === this.config.llmOpusModel; // fallback: exact match
   }
 
-  /** Check whether `model` string matches the configured Sonnet model tier */
+  /** Check whether `model` string matches the configured Sonnet tier (prefix match from config.toml [model_tiers]) */
   private isSonnetModel(model: string): boolean {
-    return model === this.config.llmSonnetModel;
+    const prefixes = this.config.sonnetModelPrefixes;
+    if (prefixes.length > 0) return prefixes.some((p) => model.includes(p));
+    return model === this.config.llmSonnetModel; // fallback: exact match
   }
 
   // ── Private helpers ─────────────────────────────────────────────────

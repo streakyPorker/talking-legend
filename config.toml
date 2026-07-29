@@ -21,7 +21,12 @@ opus   = 40960   # 5x 原值 8192
 sonnet = 5120    # 5x 原值 1024
 haiku  = 512
 
-# ── Extended Thinking（默认开启） ──────────────────────────
+# ── 模型层级（前缀匹配，用于自动选择 thinking/max_tokens） ──
+[model_tiers]
+opus = ["claude-opus-4", "deepseek-v4-pro"]
+sonnet = ["claude-sonnet-4", "deepseek-v4-flash"]
+haiku = ["claude-haiku-4", "deepseek-v4-lite"]
+# 引擎调用时，按模型名前缀匹配层级，自动选择对应的 thinking budget 和 max_tokens
 [llm.thinking]
 opus_budget   = 4096
 sonnet_budget = 2048
