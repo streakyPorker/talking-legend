@@ -164,6 +164,30 @@ fix(bfNNN): 简短描述
 
 ---
 
+## 新建 RFC 文件清单
+
+```
+rfcs/已提议/RFC-NNN-标题/proposal.md   ← 问题+动机
+rfcs/正在进行/RFC-NNN-标题/design.md   ← 决策+架构+伪代码+文件清单
+rfcs/已完成/RFC-NNN-标题/execution.md  ← 验证证据
+```
+
+---
+
+## 可复用代码模式
+
+**SSE 端点**: `@Res() Response` + `text/event-stream` + `for-await` + `writableEnded` 保护。参考 `GameController`。
+
+**ContextProvider**: `读DB → 创建Module → setData() → Map → ContextBuilder.build()`。GM=5模块, NPC=5模块。
+
+**两阶段事务**: Phase1 `db.transaction` 同步快照+turn bump → Phase2 异步 LLM → Phase3 同步日志。
+
+**配置优先级**: `process.env > settings.json > config.toml > 硬编码`。行级替换保留注释，`config.default.toml` 为重置模板。
+
+**Agent 分发**: 文件级隔离（并行 agent 文件清单零交集），Wave 1→2→3 按依赖分阶段。
+
+---
+
 ## 反模式（禁止）
 
 - ❌ 跳过 grill-me 直接写代码 → 决策未闭合，返工
