@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getConfig, updateConfig } from '../services/api.js';
+import { getConfig, updateConfig, resetConfig } from '../services/api.js';
 import type { ConfigSection, ConfigItem } from '../services/api.js';
 
 interface Props {
@@ -302,6 +302,29 @@ export function ConfigScreen({ onClose }: Props) {
           )}
 
           <div className="flex gap-2 justify-end">
+            <button
+              className="btn btn-ghost btn-warning"
+              onClick={async () => {
+                if (!confirm('确定恢复所有配置项为默认值？此操作不可撤销。')) return;
+                try {
+                  const r = await resetConfig();
+                  setSaveResult({ type: r.success ? 'success' : 'error', message: r.message });
+                  if (r.success) {
+                    setDirty({});
+                    const data = await getConfig();
+                    const init: Record<string, string | number> = {};
+                    for (const s of data.sections) for (const i of s.items) init[dotKey(s, i)] = i.value;
+                    setInitialValues(init);
+                    setSections(data.sections);
+                  }
+                } catch (err: unknown) {
+                  setSaveResult({ type: 'error', message: err instanceof Error ? err.message : '恢复失败' });
+                }
+              }}
+              disabled={isSaving}
+            >
+              恢复默认
+            </button>
             <button className="btn btn-ghost" onClick={onClose} disabled={isSaving}>
               取消
             </button>

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Body,
   HttpCode,
   HttpStatus,
@@ -365,6 +366,26 @@ export class ConfigController {
     this.configService.reloadToml();
 
     return { applied, restartRequired, errors };
+  }
+
+  @Post('reset')
+  @HttpCode(HttpStatus.OK)
+  resetConfig(): { success: boolean; message: string } {
+    const tomlPath = this.configService.tomlPath;
+    const defaultPath = tomlPath.replace(/\.toml$/, '.default.toml');
+
+    try {
+      if (!fs.existsSync(defaultPath)) {
+        return { success: false, message: `Default config not found at ${defaultPath}` };
+      }
+      fs.copyFileSync(defaultPath, tomlPath);
+      this.configService.reloadToml();
+      this.logger.log('Config reset to defaults');
+      return { success: true, message: '已恢复默认配置，部分项需重启后端' };
+    } catch (err) {
+      this.logger.error('Failed to reset config', (err as Error).message);
+      return { success: false, message: '恢复默认配置失败' };
+    }
   }
 
   /** 通过 ConfigService 的 getTomlValue 获取当前值 */

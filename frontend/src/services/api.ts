@@ -97,6 +97,13 @@ export async function getConfig(): Promise<GetConfigResponse> {
   return res.json();
 }
 
+/** 恢复默认配置 */
+export async function resetConfig(): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/config/reset`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to reset config: ${res.status}`);
+  return res.json();
+}
+
 /** 更新部分配置项（直接返回，不走 APIResponse 包装） */
 export async function updateConfig(
   changes: Record<string, string | number>,

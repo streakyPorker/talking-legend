@@ -1,0 +1,46 @@
+# ============================================================
+# Talking Legend — 默认配置文件
+# 优先级: 环境变量 > settings.json > config.toml > 硬编码
+# 所有值均可通过同名环境变量覆盖
+# ============================================================
+
+[server]
+port = 4001
+
+# ── Anthropic API ──────────────────────────────────────────
+# 敏感信息（api_key）不在此文件，从 ~/.claude/settings.json 读取
+[anthropic]
+base_url = "https://api.anthropic.com"
+opus_model = "claude-opus-4-8"
+sonnet_model = "claude-sonnet-4-6"
+haiku_model = "claude-haiku-4-5-20251001"
+
+# ── Token 预算（max_tokens） ───────────────────────────────
+[llm.max_tokens]
+opus   = 40960   # 5x 原值 8192
+sonnet = 5120    # 5x 原值 1024
+haiku  = 512
+
+# ── 模型层级（前缀匹配，用于自动选择 thinking/max_tokens） ──
+[model_tiers]
+opus = ["claude-opus-4", "deepseek-v4-pro"]
+sonnet = ["claude-sonnet-4", "deepseek-v4-flash"]
+haiku = ["claude-haiku-4", "deepseek-v4-lite"]
+# 引擎调用时，按模型名前缀匹配层级，自动选择对应的 thinking budget 和 max_tokens
+[llm.thinking]
+opus_budget   = 4096
+sonnet_budget = 2048
+
+# ── 上下文预算（字符估算） ─────────────────────────────────
+[llm.context_budget]
+opus   = 180000
+sonnet = 50000
+haiku  = 8000
+
+# ── 流式超时（毫秒） ───────────────────────────────────────
+[llm.stream]
+timeout_ms = 90000
+
+# ── NPC 对话 ───────────────────────────────────────────────
+[npc]
+history_rounds = 20
