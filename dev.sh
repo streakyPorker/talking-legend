@@ -22,7 +22,12 @@ FRONTEND_PORT=5173
 kill_all() {
   echo "🛑 停止所有进程..."
   taskkill //F //IM node.exe 2>/dev/null || true
-  sleep 1
+  # 强制释放端口（Windows netstat 找 PID）
+  for port in $BACKEND_PORT $FRONTEND_PORT; do
+    pid=$(netstat -ano 2>/dev/null | grep ":$port " | grep LISTENING | awk '{print $NF}' | head -1)
+    [ -n "$pid" ] && taskkill //F //PID "$pid" 2>/dev/null || true
+  done
+  sleep 2
 }
 
 wait_backend() {
