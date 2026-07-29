@@ -23,8 +23,10 @@ export interface LLMConfig {
 export interface LLMCallOptions {
   systemPrompt: string;
   userPrompt: string;
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature?: number;
   maxTokens?: number;
+  thinkingBudget?: number;
 }
 
 export interface LLMCallResult {
@@ -105,6 +107,13 @@ export class LLMClient {
    * Stream LLM response via SSE (server-sent events).
    * Yields `StreamChunk` objects as the model generates output.
    *
+   * Supports extended thinking via `thinkingBudget`: when > 0, enables
+   * Anthropic's `thinking` parameter with the given budget.
+   * `thinking_delta` content is received internally but NOT yielded.
+   *
+   * When `options.messages` is provided, it is prepended before the
+   * user prompt to support multi-turn conversations.
+   *
    * @param options.model - Model ID; use one of the getters
    *   (opusModel / sonnetModel / haikuModel).
    */
@@ -118,6 +127,11 @@ export class LLMClient {
     );
 
     try {
+      const thinkingBudget = options.thinkingBudget ?? this.defaultThinkingBudget(options.model);
+      const thinking = thinkingBudget > 0
+        ? { type: 'enabled' as const, budget_tokens: thinkingBudget }
+        : undefined;
+
       const response = await fetch(
         `${this.config.llmBaseUrl}/v1/messages`,
         {
@@ -130,9 +144,13 @@ export class LLMClient {
           body: JSON.stringify({
             model: options.model,
             system: options.systemPrompt,
-            messages: [{ role: 'user', content: options.userPrompt }],
-            max_tokens: options.maxTokens ?? 1024,
+            messages: [
+              ...(options.messages ?? []),
+              { role: 'user', content: options.userPrompt },
+            ],
+            max_tokens: options.maxTokens ?? this.getDefaultMaxTokens(options.model),
             temperature: options.temperature ?? 0.7,
+            ...(thinking !== undefined ? { thinking } : {}),
             stream: true,
           }),
           signal: controller.signal,
@@ -176,15 +194,16 @@ export class LLMClient {
 
             switch (payload.type) {
               case 'content_block_start':
-                // A content block has started; no text yet, but we
-                // can record which kind of block (text, tool_use, etc.)
+                // A content block has started; record the block type
+                // for thinking blocks we simply note and continue
                 break;
 
               case 'content_block_delta': {
-                const textDelta = payload.delta?.text;
-                if (payload.delta?.type === 'text_delta' && textDelta) {
-                  yield { type: 'chunk', content: textDelta };
+                const delta = payload.delta;
+                if (delta?.type === 'text_delta' && delta.text) {
+                  yield { type: 'chunk', content: delta.text };
                 }
+                // thinking_delta: received but not yielded to caller
                 break;
               }
 
@@ -231,6 +250,38 @@ export class LLMClient {
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  // ── Thinking / max_tokens defaults ───────────────────────────────────
+
+  /**
+   * Return the default thinking budget for the given model.
+   * Haiku does not support extended thinking => 0.
+   */
+  private defaultThinkingBudget(model: string): number {
+    if (this.isOpusModel(model)) return this.config.llmThinkingOpus;
+    if (this.isSonnetModel(model)) return this.config.llmThinkingSonnet;
+    return 0; // Haiku — no thinking support
+  }
+
+  /**
+   * Return the default max_tokens for the given model.
+   * These are the RFC-013 "5x" defaults, configurable via env.
+   */
+  private getDefaultMaxTokens(model: string): number {
+    if (this.isOpusModel(model)) return this.config.llmMaxTokensOpus;
+    if (this.isSonnetModel(model)) return this.config.llmMaxTokensSonnet;
+    return this.config.llmMaxTokensHaiku;
+  }
+
+  /** Check whether `model` string matches the configured Opus model tier */
+  private isOpusModel(model: string): boolean {
+    return model === this.config.llmOpusModel;
+  }
+
+  /** Check whether `model` string matches the configured Sonnet model tier */
+  private isSonnetModel(model: string): boolean {
+    return model === this.config.llmSonnetModel;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────
