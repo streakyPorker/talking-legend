@@ -90,17 +90,22 @@ export interface UpdateConfigResponse {
   errors: string[];
 }
 
-/** 读取全部配置 */
+/** 读取全部配置（直接返回，不走 APIResponse 包装） */
 export async function getConfig(): Promise<GetConfigResponse> {
-  return request<GetConfigResponse>('/config');
+  const res = await fetch(`${API_BASE}/config`);
+  if (!res.ok) throw new Error(`Failed to load config: ${res.status}`);
+  return res.json();
 }
 
-/** 更新部分配置项 */
+/** 更新部分配置项（直接返回，不走 APIResponse 包装） */
 export async function updateConfig(
   changes: Record<string, string | number>,
 ): Promise<UpdateConfigResponse> {
-  return request<UpdateConfigResponse>('/config', {
+  const res = await fetch(`${API_BASE}/config`, {
     method: 'PUT',
-    body: JSON.stringify({ changes } satisfies UpdateConfigRequest),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ changes }),
   });
+  if (!res.ok) throw new Error(`Failed to update config: ${res.status}`);
+  return res.json();
 }
