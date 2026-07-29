@@ -20,7 +20,7 @@ Requires Node.js >= 18. npm workspaces monorepo (`shared` / `backend` / `fronten
 | Task | Command |
 |------|---------|
 | Install | `npm install` |
-| 一键拉起 | `bash dev.sh` — 构建+启动前后台 (:5173 + :4001) |
+| 一键拉起 | `bash dev.sh` — 构建+启动前后台 (:30000 + :30001) |
 | 仅后台 | `bash dev.sh backend` |
 | 仅前台 | `bash dev.sh frontend` |
 | 重拉 | `bash dev.sh restart` — kill + 重建 + 启动 |
@@ -48,7 +48,7 @@ Backend gotchas:
 
 | Section | Key | Default |
 |---------|-----|---------|
-| `[server]` | `port` | `4001` |
+| `[server]` | `port` | `30001` |
 | `[anthropic]` | `base_url`, `opus_model`, `sonnet_model`, `haiku_model` | `api.anthropic.com`, claude-opus-4-8, etc. |
 | `[model_tiers]` | `opus`, `sonnet`, `haiku` | prefix lists — includes deepseek models |
 | `[llm.max_tokens]` | `opus` / `sonnet` / `haiku` | 40960 / 5120 / 512 |
@@ -72,7 +72,7 @@ Backend gotchas:
   - **`context/`** (RFC-004) — `ContextBuilder` assembles LLM context from pluggable modules (player-state, world-state, scenario-hint, npc-persona, npc-memory, narrative-history, active-events, intent-input). `MemoryFilter` prunes stale memories. `NarrativeHistory` manages the narrative log. Supports budget enforcement (`ContextBudgetError`).
   - **`prompts/`** (RFC-004) — `TemplateEngine` renders prompt templates with `{{variable}}` interpolation. Templates live under `templates/`: `gm/narrative`, `npc/dialogue`, `intent/classify`, `event/trigger` — each with `system.md` + `user.md` defining expected JSON outputs.
   - **`utils/`** — `id.ts` (uuid generation), `narrative-log.ts` (file-based narrative storage alongside SQLite).
-- **`frontend/`** — React 18 + Vite + TailwindCSS v4 + daisyUI 5. Vite dev server proxies `/api` → `http://localhost:4001`. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand appears in design docs but is NOT installed.
+- **`frontend/`** — React 18 + Vite + TailwindCSS v4 + daisyUI 5. Vite dev server proxies `/api` → `http://localhost:30001`. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand installed (RFC-010).
 
 Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__tests__/`), frontend `jsdom` + Testing Library (`src/test-setup.ts`).
 

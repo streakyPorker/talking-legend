@@ -7,7 +7,7 @@ vi.mock('fs', () => ({
   readFileSync: () =>
     '[llm.max_tokens]\nopus = 40960\nsonnet = 5120\n' +
     '[npc]\nhistory_rounds = 20\n' +
-    '[server]\nport = 4001\n' +
+    '[server]\nport = 30001\n' +
     '[model_tiers]\nopus = ["claude-opus-4"]\n',
   writeFileSync: () => {},
   existsSync: () => true,
@@ -31,7 +31,7 @@ const DEFAULT_TOML_VALUES: Record<string, string | number> = {
   'model_tiers.opus': 'claude-opus-4, deepseek-v4-pro',
   'model_tiers.sonnet': 'claude-sonnet-4, deepseek-v4-flash',
   'model_tiers.haiku': 'claude-haiku-4, deepseek-v4-lite',
-  'server.port': 4001,
+  'server.port': 30001,
   'llm.max_tokens.opus': 40960,
   'llm.max_tokens.sonnet': 5120,
   'llm.max_tokens.haiku': 512,
@@ -333,7 +333,7 @@ describe('TOML 行级替换逻辑（单元）', () => {
   it('不修改跨 section 同名的 key，追加到当前 section 末尾', () => {
     const lines = [
       '[server]',
-      'port = 4001',
+      'port = 30001',
       '',
       '[llm.max_tokens]',
       'opus = 40960',
@@ -341,7 +341,7 @@ describe('TOML 行级替换逻辑（单元）', () => {
     const ok = applyTomlChange(lines, 'server', 'opus', '999');
     // opus 不在 [server] 中 → 追加到 server section 末尾（下一个 section 之前）
     expect(ok).toBe(true);
-    expect(lines[1]).toBe('port = 4001');
+    expect(lines[1]).toBe('port = 30001');
     expect(lines[2]).toBe(''); // 保持空行
     expect(lines[3]).toBe('[llm.max_tokens]');
     // opus = 999 被追加在 [server] 末尾（port 之后，空行之前的位置实际上）

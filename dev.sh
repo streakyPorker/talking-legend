@@ -14,8 +14,8 @@
 
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_PORT=4001
-FRONTEND_PORT=5173
+BACKEND_PORT=30001
+FRONTEND_PORT=30000
 
 # ── 工具函数 ──────────────────────────────────────────────
 

@@ -59,7 +59,7 @@ export class ConfigService {
 
   // ── 公开 getter ──────────────────────────────────────────────
 
-  get port(): number { return this.getNum('server.port', 'PORT', 4001); }
+  get port(): number { return this.getNum('server.port', 'PORT', 30001); }
 
   /** 去除模型名末尾的可选后缀如 [1M]、[128K] */
   private cleanModel(name: string): string { return name.replace(/\[.*\]$/, '').trim(); }
