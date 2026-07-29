@@ -222,3 +222,17 @@ git checkout config.toml
 | 7 | config.toml git checkout 恢复 | PASS |
 
 **所有验证项通过。RFC-014 配置中心后端 API 功能完成。**
+
+---
+
+## Step 8: Playwright 中度体验（2026-07-30）
+
+| 页面 | 截图 | 关键体验检查 |
+|------|------|-------------|
+| 入口页 (`/`) | [entry-page.png](./rfc14-entry-page.png) | 布局居中正常，gear 按钮右上角无重叠，输入框可用 |
+| 游戏页 (`/game/:id`) | [game-page.png](./rfc14-game-page.png) | Header 无重叠：world name + game-info + gear 按钮正常排列；sidebar + narrative + input 完整 |
+| 配置面板 | [config-panel.png](./rfc14-config-panel.png) | 8 sections 全部展示，热加载/需重启标记正确，值正确加载，保存按钮初始 disabled |
+| 路由验证 | — | `/` ↔ `/game/:id` 跳转正常，URL 同步更新 |
+| 入口页最终 | [entry-final.png](./rfc14-entry-final.png) | 关闭配置后返回入口页正常，无残留元素 |
+
+**Playwright 结论**：无关键体验问题。布局、路由、配置面板均正常。
