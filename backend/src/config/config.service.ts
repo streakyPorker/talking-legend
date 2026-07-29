@@ -61,11 +61,14 @@ export class ConfigService {
 
   get port(): number { return this.getNum('server.port', 'PORT', 4001); }
 
+  /** 去除模型名末尾的可选后缀如 [1M]、[128K] */
+  private cleanModel(name: string): string { return name.replace(/\[.*\]$/, '').trim(); }
+
   get llmApiKey(): string    { return this.get('anthropic.api_key', 'ANTHROPIC_AUTH_TOKEN', ''); }
   get llmBaseUrl(): string   { return this.get('anthropic.base_url', 'ANTHROPIC_BASE_URL', 'https://api.anthropic.com'); }
-  get llmOpusModel(): string   { return this.get('anthropic.opus_model', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'claude-opus-4-8'); }
-  get llmSonnetModel(): string { return this.get('anthropic.sonnet_model', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'claude-sonnet-4-6'); }
-  get llmHaikuModel(): string  { return this.get('anthropic.haiku_model', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'claude-haiku-4-5-20251001'); }
+  get llmOpusModel(): string   { return this.cleanModel(this.get('anthropic.opus_model', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'claude-opus-4-8')); }
+  get llmSonnetModel(): string { return this.cleanModel(this.get('anthropic.sonnet_model', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'claude-sonnet-4-6')); }
+  get llmHaikuModel(): string  { return this.cleanModel(this.get('anthropic.haiku_model', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'claude-haiku-4-5-20251001')); }
 
   get llmMaxTokensOpus(): number   { return this.getNum('llm.max_tokens.opus', 'LLM_MAX_TOKENS_OPUS', 40960); }
   get llmMaxTokensSonnet(): number { return this.getNum('llm.max_tokens.sonnet', 'LLM_MAX_TOKENS_SONNET', 5120); }
