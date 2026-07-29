@@ -11,10 +11,13 @@ npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo ro
 | Task | Command |
 |------|---------|
 | Install | `npm install` |
-| Dev (both) | `npm run dev` — backend :3001 + frontend :3000 |
-| Dev backend | `npm run dev -w backend` — SWC watch + `node --watch dist/main.js` |
-| Dev frontend | `npm run dev -w frontend` — Vite, proxies `/api` → :3001 |
-| Build all | `npm run build` — shared → backend → frontend (order matters: consumers import shared's `dist/`) |
+| 一键拉起 | `bash dev.sh` — 构建+启动前后台 (:5173 + :4001) |
+| 仅后台 | `bash dev.sh backend` |
+| 仅前台 | `bash dev.sh frontend` |
+| 重拉 | `bash dev.sh restart` — kill + 重建 + 启动 |
+| 热更新 | `bash dev.sh hot` — watch 编译 + 自动重启 |
+| 停止 | `bash dev.sh stop` |
+| Build all | `npm run build` — shared → backend → frontend |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Test all | `npm test` |
