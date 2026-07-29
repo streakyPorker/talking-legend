@@ -19,25 +19,26 @@ describe('App', () => {
     render(<App />);
 
     // 初始时配置面板不可见
-    expect(screen.queryByText('配置中心')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
 
     // 点击齿轮打开
     fireEvent.click(screen.getByRole('button', { name: /打开配置/i }));
-    expect(screen.getByText('配置中心')).toBeDefined();
-    expect(screen.getByLabelText('关闭配置')).toBeDefined();
+    expect(screen.getByRole('dialog')).toBeDefined();
+    expect(screen.getByRole('heading', { name: /配置中心/i })).toBeDefined();
+    expect(screen.getByLabelText('关闭')).toBeDefined();
 
     // 点击关闭按钮
-    fireEvent.click(screen.getByLabelText('关闭配置'));
-    expect(screen.queryByText('配置中心')).toBeNull();
+    fireEvent.click(screen.getByLabelText('关闭'));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('should close config screen on Escape key', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /打开配置/i }));
-    expect(screen.getByText('配置中心')).toBeDefined();
+    expect(screen.getByRole('dialog')).toBeDefined();
 
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByText('配置中心')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
