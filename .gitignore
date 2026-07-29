@@ -33,6 +33,7 @@ coverage/
 .multica/daemon_task_context.json
 .agent_context/
 .omc/
+.claude/skills/*-multica/
 
 # Playtest & debug artifacts
 playtest/

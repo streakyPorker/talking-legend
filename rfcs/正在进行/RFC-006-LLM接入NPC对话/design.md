@@ -261,7 +261,50 @@ backend/src/
     npc.repository.ts           🔧 新增 addMemory(npcId, content, turn) 方法
 ```
 
-## 7. 非目标
+## 7. LLMClient 扩展（RFC-013 前置）
+
+RFC-006 需要 `LLMClient.stream()` 支持 `messages` 数组（多轮对话历史）。RFC-013 实现时统一加入：
+
+```typescript
+// LLMClient.stream() 新增参数
+interface LLMCallOptions {
+  systemPrompt: string;
+  userPrompt: string;                     // 最终用户消息
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>;  // ← 历史消息
+  maxTokens?: number;
+  temperature?: number;
+  thinkingBudget?: number;
+}
+
+// fetch body 组装
+messages: [
+  ...(options.messages ?? []),
+  { role: 'user', content: options.userPrompt },
+]
+```
+
+## 8. NpcRepository 新增方法
+
+```typescript
+// NpcRepository 新增
+addMemory(npcId: string, content: string, turn: number): void {
+  this.insertMemoryStmt.run({ npc_id: npcId, content, turn });
+}
+```
+`insertMemoryStmt` 已存在（第 23 行附近），无需新 migration。
+
+## 9. 测试策略
+
+| 层级 | 内容 | 框架 |
+|------|------|------|
+| 单元 | `NpcEngine.generate()` — mock ContextProvider + LLMClient，验证 chunk/done/降级/情绪 | Vitest |
+| 单元 | `NpcEngine.fallbackDialogue()` — 验证降级文本含 NPC 名 | Vitest |
+| 单元 | `ContextProvider.buildNpcContext()` — mock repos，5模块+setData+组装 | Vitest |
+| 单元 | `NpcService` 对话历史 Map — add/get/trim/并发锁 | Vitest |
+| 服务 | `POST /api/game/:gameId/npc/:npcId/talk/stream` — supertest SSE | Supertest |
+| 服务 | 同区域校验 — 非同区域 NPC 返回 400 | Supertest |
+
+## 10. 非目标
 
 - ❌ NPC 记忆异步分级（RFC-007 接入 Haiku 后）
 - ❌ 多 NPC 社交感知
