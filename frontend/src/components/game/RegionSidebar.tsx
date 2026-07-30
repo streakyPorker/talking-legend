@@ -1,17 +1,37 @@
+import { useResizable } from '../../hooks/useResizable.js';
 import { RegionInfo } from './RegionInfo.js';
 import { ConnectedRegions } from './ConnectedRegions.js';
 import { QuestList } from './QuestList.js';
 import { NearbyNpcs } from './NearbyNpcs.js';
 
-/** Q8: 子组件（RegionInfo/ConnectedRegions/QuestList/NearbyNpcs）独立可复用，
- *  不依赖本容器。RFC-015 可直接拿用放入 TopNavBar popover。 */
 export function RegionSidebar() {
+  const { width, dragging, onMouseDown } = useResizable({
+    initial: 260,
+    min: 180,
+    max: 500,
+  });
+
   return (
-    <aside className="w-[260px] border-l border-base-300 pl-4 flex flex-col gap-4">
+    <aside
+      className="border-l border-base-300 pl-4 flex flex-col gap-4 shrink-0 relative"
+      style={{ width }}
+    >
+      {/* 拖拽手柄 */}
+      <div
+        onMouseDown={onMouseDown}
+        className={`absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/30 transition-colors ${
+          dragging ? 'bg-primary/50' : ''
+        }`}
+        title="拖动调整宽度"
+      />
+
       <RegionInfo />
       <ConnectedRegions />
       <QuestList />
       <NearbyNpcs />
+
+      {/* 宽度指示器 */}
+      <span className="text-[10px] text-base-content/30 text-right">{width}px</span>
     </aside>
   );
 }
