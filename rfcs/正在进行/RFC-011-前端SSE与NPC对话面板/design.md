@@ -2,117 +2,193 @@
 
 > **状态**: 正在进行
 > **创建**: 2026-07-31
-> **grill 结论**: 2026-07-31
+> **grill**: 2026-07-31
 
-## 决策记录
+## 决策总表
 
-### 1. 入口与布局
+| # | 维度 | 决策 |
+|---|------|------|
+| 1 | 入口 | NearbyNpcs 点击 → 右侧抽屉滑入 (380px) |
+| 2 | UI | 聊天气泡: NPC `chat-start` / 玩家 `chat-end` |
+| 3 | NPC↔GM | 独立流 + haiku 异步摘要注入 GM context |
+| 4 | 流式 | SSE 逐字 + XML `<dialogue>` 标签渲染 |
+| 5 | Prompt | 模板驱动，从 DB 属性自动组装（兼容动态 NPC） |
+| 6 | 持久化 | DB 为主，worlds JSON 只是种子 |
+| 7 | 记忆 | DB 持久化 + importance 分级 |
+| 8 | 工具 | 本期搭框架 NpcEngine.generateWithTools()，无工具实例 |
+| 9 | 情绪 | LLM `[mood:xxx]` 标记驱动（NpcEngine 已有） |
+| 10 | 模型 | 对话: sonnet / 摘要: haiku |
+| 11 | 并发 | 前端交互互斥；后端锁保留；未来 GM 异步演化子 agent |
+| 12 | 事件感知 | 结构化事件 feed: 硬编码+LLM提取，区域范围，永久+重要性过滤 |
+| 13 | 上下文 | 世界状态 + 事件feed + 玩家状态 + 同区域 NPC |
+| 14 | 动态NPC | 属性同构，统一走 DB → 模板 → prompt |
 
-**决策**: 侧栏 NearbyNpcs 点击 → 右侧抽屉滑入
+---
 
-- 抽屉覆盖侧栏区域，固定 380px
-- 不遮挡叙事面板
-- `z-40`，高于侧栏 `z-0`
-- 单抽屉模式：点击新 NPC 先关闭当前抽屉
+## 1. 入口与布局
 
-### 2. 对话 UI
+- 侧栏 NearbyNpcs 点击 NPC → 右侧抽屉滑入
+- 抽屉固定 380px，`z-40`，不随侧栏拖拽改变
+- 单抽屉模式：点击新 NPC 先关闭当前
 
-**决策**: 聊天气泡 + 角色名 + 流式输出
+## 2. 对话 UI
 
-- NPC 消息: `chat-start`, `bg-neutral text-neutral-content`
+- NPC 消息: `chat-start`, `bg-neutral text-neutral-content` + 角色名标签
 - 玩家消息: `chat-end`, `bg-primary text-primary-content`
-- 每条消息显示角色名小标签
-- GM 叙事和 NPC 对话完全独立 — NPC 回复不在叙事面板显示
+- NPC 回复用 `TagRenderer` 渲染 XML 标签
+- GM 叙事面板完全独立，不显示 NPC 对话内容
 
-### 3. NPC ↔ GM 关系
+## 3. NPC ↔ GM 联动
 
-**决策**: 独立流 + 异步摘要通知
+```
+玩家输入 → NPC SSE 流式回复 → done
+  └→ 前端调 POST /api/game/:id/npc/:npcId/summary
+      └→ haiku 生成一句话摘要
+          └→ 写入 narrative_history → 下次 GM 生成时感知
+```
 
-- NPC 对话和 GM 叙事是两个独立 SSE 流
-- NPC 对话完成后，**haiku 生成一句话摘要**
-  - 例："村长告知了玩家关于龙脊峰有龙的警告"
-- 摘要写入 GM context（`narrative_history` 模块），下次 GM 生成时感知
-- 触发时机：`done` 事件后，前端调 `POST /api/game/:id/npc/:npcId/summary`
+- 例: "村长告知了玩家关于龙脊峰有龙的警告"
+- fire-and-forget: 摘要生成失败不影响对话体验
 
-### 4. 流式输出
+## 4. 流式输出
 
-**决策**: 逐字流式 SSE + XML 标签
+- 复用 `POST /api/game/:gameId/npc/:npcId/talk/stream`（已实现）
+- 前端 SSE: `chunk` → 追加当前气泡末尾, `done` → 完成
+- 生成期间: 输入框禁用, "..." 加载态
 
-- 后端: `POST /api/game/:gameId/npc/:npcId/talk/stream`（已实现）
-- 前端: SSE `chunk` → 追加到当前气泡，`done` → 完成
-- NPC 回复使用 XML 标签：`<dialogue speaker="name">台词</dialogue>`
-- 抽屉内气泡用 `TagRenderer` 渲染
+## 5. Prompt 系统
 
-### 5. NPC Prompt 系统
+模板 `templates/npc/dialogue/system.md`:
+```
+你是{{npcName}}，{{npcRole}}。
+性格：{{npcPersonality}}
+当前位置：{{npcLocation}}
+当前心情：{{npcMood}}
+同区域其他人：{{nearbyNpcs}}
 
-**决策**: 模板驱动 + 属性注入，兼容静态和动态 NPC
+## 世界状态
+时间：{{timeOfDay}} · 天气：{{weather}}
+{{regionDescription}}
 
-**约束**: 未来 RFC-008 世界演化会动态生成 NPC → prompt 不能依赖手写配置
+## 最近本地事件
+{{activeEvents}}
 
-**方案**: 通用 NPC 对话模板，运行时从 NPC 属性组装 prompt
+## 最近发生的事
+{{narrativeHistory}}
 
-- **模板** `templates/npc/dialogue/system.md`:
-  ```
-  你是{{npcName}}，{{npcRole}}。
-  性格：{{npcPersonality}}
-  当前位置：{{npcLocation}}
-  当前心情：{{npcMood}}
-  对玩家的了解：{{npcMemories}}
-  世界状态：{{worldState}}
-  
-  用符合你身份和性格的方式与玩家对话。使用 XML 标签格式化回复。
-  ```
-- **属性来源**: 统一从 `npcs` DB 表读取（`name/role/personality/location/mood`）
-  - 静态 NPC: 创建游戏时从 worlds JSON seed 到 npcs 表
-  - 动态 NPC: 演化系统 INSERT 到 npcs 表，字段与静态 NPC 完全一致
-  - 前端/后端只读 DB，不关心 NPC 来源
-  - 重启后所有 NPC 从 DB 恢复，worlds JSON 只是初始种子
-- **可选覆盖**: world JSON 可提供 `promptHint` 字段追加个性化指引，但不是必须
-- **与 GM 分离**: NPC 不知道自己是"游戏角色"，只知道自己的身份
+## 玩家信息
+姓名：{{playerName}}，携带：{{inventory}}
 
-### 6. NPC 持久化策略
+## 你对玩家的记忆
+{{npcMemories}}
 
-**决策**: DB 为主，worlds JSON 只是初始种子
+用符合你身份和性格的方式与玩家对话。使用 <dialogue speaker="你的名字">台词</dialogue> 标签。
+```
+
+- 属性来源: 统一从 `npcs` DB 表读取
+- 静态 NPC: worlds JSON → seed npcs 表
+- 动态 NPC: INSERT npcs 表，字段同构
+- 前端/后端只读 DB，不关心来源
+
+## 6. 持久化策略
 
 ```
 创建游戏:  worlds JSON → seed npcs 表
 运行时:    所有 NPC 从 npcs 表读写
 动态生成:  INSERT npcs 表（字段与静态一致）
-重启恢复:  npcs 表 → 恢复所有 NPC（静态+动态）
+重启恢复:  npcs 表 → 恢复所有 NPC
 ```
 
-- 静态/动态 NPC 对前端和后端完全透明
-- `npcs` 表字段: `id, game_id, name, role, personality, location, current_mood, is_alive`
-- 动态 NPC 只需填相同字段，prompt 模板自动适配
+静态/动态 NPC 对前端完全透明。
 
-### 7. NPC 记忆持久化（Phase B 合并）
+## 7. 记忆持久化
 
-**决策**: 本期一起做，结构化记忆
+- `npc_memories` 表扩展:
+  - `importance` INTEGER (1-5)
+  - `type` TEXT (`dialogue`/`event`/`summary`)
+- 对话完成 → 写入 (玩家消息 + NPC 回复摘要)
+- 抽屉打开 → 加载最近 N 条记忆
+- 前端: 头部可展开记忆列表，按 importance 排序
+- 注入: NpcContextBuilder 的 npc_memory 模块按 importance 排序
 
-- **表扩展**: `npc_memories` 加 `importance` 字段（1-5），加 `type` 字段（`dialogue`/`event`/`summary`）
-- **存储**: 每次对话完成 → 写入 memory（玩家消息 + NPC 回复摘要）
-- **加载**: 抽屉打开时 → 调 API 取最近 N 条记忆
-- **注入**: `NpcContextBuilder` 的 `npc_memory` 模块已有，确保包含新字段
-- **前端**: 抽屉头部可展开记忆摘要列表，按 importance 排
+## 8. Tool Use 框架
 
-### 7. 抽屉内容
+- 本期: `NpcEngine.generateWithTools()` — 搭框架，注册空工具列表
+- 架构复刻 `GMEngine.generateWithTools()`: tool_use 循环 + messages 注入
+- 工具注册: NpcModule 中 `ToolRegistry` 注入（与 GM 共用或独立 Registry）
+- 预留工具: `npcGiveItem`, `npcChangeMood`, `npcTriggerQuest`
+- 未来 RFC 实现具体工具
+
+## 9. 情绪系统
+
+- NpcEngine 已有 `updateMood()`: 解析 LLM 回复中的 `[mood: xxx]` 标记
+- 更新 `npcs.current_mood` 字段
+- 前端抽屉头部实时显示（😊😐😠😢😨）
+- 不需要额外开发
+
+## 10. 模型策略
+
+| 调用 | 模型 | 原因 |
+|------|------|------|
+| NPC 对话 | sonnet | 质量优先 |
+| NPC→GM 摘要 | haiku | 便宜，一句话摘要 |
+
+## 11. NPC 事件感知
+
+**决策**: 结构化事件 feed — 混合产生 + 区域范围 + 永久存储 + 重要性过滤
+
+**事件产生**（混合模式）:
+- 硬编码: 关键操作自动产生事件
+  - `moveToRegion` → `{ type: "arrival", location, actor: "player", summary: "玩家到达X" }`
+  - NPC 对话完成 → `{ type: "dialogue", location, actors: [npc, player], summary: "..." }`
+- LLM 提取: GM 叙事完成后 → haiku 从 narrative 提取结构化事件
+  - 例: "暴风雨袭击了石辉村" → `{ type: "weather", location: "village", summary: "暴风雨袭击石辉村" }`
+
+**事件结构**: `game_events (id, game_id, type, location, actors, summary, importance, turn, created_at)`
+
+**NPC 访问**: 只看到当前区域事件, WHERE location=npc.location ORDER BY importance DESC, turn DESC LIMIT N
+
+**NpcContextBuilder**: 新增 `active_events` 模块注入过滤后的事件摘要
+
+## 12. 并发控制
+
+- 前端: 输入框和 NPC 抽屉交互互斥（自然隔离）
+- 后端: `locks Map`（已有）防同一 NPC 并发对话
+- GM activeGenerations 锁保留（已有）
+- 未来: GM 异步拉起演化子 agent，不阻塞玩家
+
+## 13. NPC 上下文范围（完整）
+
+NpcContextBuilder 注入:
+- `world_state` (强制): 天气/时间/区域描述 + 同区域 NPC 列表
+- **`active_events`** (非强制): 当前区域结构化事件 feed
+- `narrative_history` (非强制): GM 叙事历史（作为事件补充）
+- `player_state` (非强制): 玩家名/物品/任务
+- `npc_persona` (强制): 角色/性格/心情
+- `npc_memory` (非强制): 按 importance 排序
+
+NPC 只知道当前区域发生的事，不知道远方情况。
+
+---
+
+## 抽屉内容
 
 ```
 ┌─────────────────────────────────┐
-│ 🧑 村长   😊               [✕] │  ← NPC 状态头
+│ 🧑 村长   😊               [✕] │  ← 状态头
 │ 村庄领袖 · 和蔼但谨慎             │
-│ 📝 记忆: "警告过玩家龙脊峰危险"    │  ← 可展开记忆摘要
+│ 📝 记忆: "警告过玩家龙脊峰危险"    │  ← 可展开
 ├─────────────────────────────────┤
 │  ┌──────────────────────┐       │
-│  │ 村长                   │       │  ← NPC 气泡 (TagRenderer)
-│  │ 欢迎来到石辉村...       │       │
+│  │ 村长                   │       │  ← NPC 气泡
+│  │ 欢迎来到石辉村...       │       │     TagRenderer 渲染
 │  └──────────────────────┘       │
 │       ┌──────────────────┐      │
 │       │ 我想打听龙脊峰    │      │  ← 玩家气泡
 │       └──────────────────┘      │
 │  ┌──────────────────────┐       │
 │  │ 村长                   │       │
-│  │ 龙脊峰...（流式输出中） │       │  ← 加载态
+│  │ 龙脊峰... ██░░░       │       │  ← 流式输出中
 │  └──────────────────────┘       │
 ├─────────────────────────────────┤
 │ [  输入你想说的话...    ] [发送] │  ← 输入栏
@@ -125,41 +201,34 @@
 
 | 文件 | 变更 |
 |------|------|
-| `components/game/NpcDialogueDrawer.tsx` | **新建**: 抽屉 + 气泡 + 输入栏 + 记忆展开 |
-| `services/api.ts` | 新增 `talkToNpcStream()` + `getNpcMemories()` + `submitNpcSummary()` |
+| `components/game/NpcDialogueDrawer.tsx` | **新建**: 抽屉容器+气泡+输入栏+记忆展开 |
+| `services/api.ts` | 新增 `talkToNpcStream()` `getNpcMemories()` `submitNpcSummary()` |
 | `hooks/useNpcDialogue.ts` | **新建**: SSE 流式 hook |
-| `components/game/NearbyNpcs.tsx` | NPC 列表项加点击 → openDrawer |
+| `components/game/NearbyNpcs.tsx` | NPC 项加 `onClick` |
 | `components/game/GameScreen.tsx` | 集成 NpcDialogueDrawer |
 
 ### 后端
 
 | 文件 | 变更 |
 |------|------|
-| `templates/npc/dialogue/system.md` | **新建**: NPC prompt 模板 |
-| `world-config/world-config.schema.ts` | NpcConfig 可选加 `promptHint` 字段 |
-| `worlds/*/world.json` | NPC 可选 `promptHint`（非必须） |
+| `prompts/templates/npc/dialogue/system.md` | **新建**: NPC prompt 模板 |
+| `llm/npc-engine.ts` | 新增 `generateWithTools()` 框架 |
 | `db/migrate.ts` | v3: `npc_memories` 加 `importance`, `type` |
-| `npc/npc.service.ts` | Map→DB 读写记忆 + 摘要生成端点 |
-| `npc/npc.controller.ts` | 新增 `POST :npcId/summary` 端点 |
+| `db/repositories/npc.repository.ts` | 新增 `getMemories(npcId, limit)` |
+| `npc/npc.service.ts` | Map→DB 读写记忆; lock 复用 |
+| `npc/npc.controller.ts` | 新增 `POST :npcId/summary` + `GET :npcId/memories` |
 | `context/modules/npc-memory.module.ts` | 按 importance 排序渲染 |
-
-## 交互流程
-
-```
-1. 玩家点击 NearbyNpcs → 抽屉滑入
-2. 加载 NPC 记忆 → 显示在头部
-3. 输入 → 发送 → SSE 流式
-4. NPC 回复逐字气泡
-5. 可继续多轮对话
-6. done → haiku 生成摘要 → 注入 GM context
-7. 关闭抽屉 → 记忆已持久化
-```
+| `context-provider.ts` | buildNpcContext 加 nearbyNpcs + active_events |
+| `context/modules/active-events.module.ts` | 扩展: 按 location 过滤事件 |
+| `db/migrate.ts` | v4: 新建 `game_events` 表 |
+| `world-config/world-config.schema.ts` | NpcConfig 可选 `promptHint` |
 
 ## 边界情况
 
-- NPC 不在同区域：NearbyNpcs 只列同区域 NPC
-- SSE 断流：error toast，保留已接收内容
-- LLM 不可用：fallback → NPC 沉默/兜底文案
-- 快速点击多 NPC：关闭当前，打开新（单抽屉）
-- 抽屉打开时拖侧栏：抽屉固定 380px 不跟随
-- NPC 第一次对话：无记忆，显示 "初次见面"
+- NPC 不在同区域: NearbyNpcs 只列同区域 NPC，点击无问题
+- SSE 断流: error toast，保留已接收气泡
+- LLM 不可用: fallback → "XXX沉默了..."
+- 快速切换 NPC: 关闭当前抽屉，打开新 NPC
+- 抽屉+侧栏拖拽: 抽屉 380px 固定不跟随
+- 首次对话: 无记忆 → "初次见面"
+- 摘要失败: fire-and-forget，静默忽略
