@@ -57,6 +57,26 @@ export async function performActionStream(
   return response.body.getReader();
 }
 
+/** SSE 流式 NPC 对话 */
+export async function talkToNpcStream(
+  gameId: string,
+  npcId: string,
+  message: string,
+): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+  const response = await fetch(
+    `${API_BASE}/game/${encodeURIComponent(gameId)}/npc/${encodeURIComponent(npcId)}/talk/stream`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    },
+  );
+  if (!response.ok || !response.body) {
+    throw new Error(`NPC stream request failed: ${response.status}`);
+  }
+  return response.body.getReader();
+}
+
 // === Config Center Types & API ===
 
 export interface ConfigItem {
