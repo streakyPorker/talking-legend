@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
 import { LegendLogger } from '../common/logger/legend.logger';
 import type Database from 'better-sqlite3';
+import * as fs from 'fs';
+import * as path from 'path';
 import type {
   CreateGameRequest,
   CreateGameResponse,
@@ -24,6 +26,7 @@ import { WorldConfigService } from '../world-config/world-config.service';
 import { WorldService } from '../world/world.service';
 import { GMEngine } from '../llm/gm-engine';
 import { TravelLogRepository } from '../db/repositories/travel-log.repository';
+import { SaveRepository, SaveRecord } from '../db/repositories/save.repository';
 import { v4 as uuidv4 } from '../utils/id';
 
 @Injectable()
@@ -63,6 +66,7 @@ export class GameService {
     @Inject(GMEngine) private readonly gmEngine: GMEngine,
     @Inject(forwardRef(() => WorldService)) private readonly worldService: WorldService,
     @Inject(TravelLogRepository) private readonly travelLogRepo: TravelLogRepository,
+    @Inject(SaveRepository) private readonly saveRepo: SaveRepository,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
@@ -293,6 +297,97 @@ export class GameService {
       throw err;
     } finally {
       this.activeGenerations.delete(gameId);
+    }
+  }
+
+  // ── Save / Load ───────────────────────────────────────────────
+
+  /**
+   * Save game state to a numbered slot.
+   * Copies DB file and narrative log to data/saves/slot_N.*
+   */
+  async saveGame(gameId: string, slot: number): Promise<{ success: boolean; meta: SaveRecord }> {
+    const game = this.gameRepo.findById(gameId);
+    if (!game) throw new NotFoundException(`Game not found: ${gameId}`);
+
+    const world = this.worldRepo.findByGameId(gameId);
+    const player = this.playerRepo.findByGameId(gameId);
+
+    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    fs.mkdirSync(savesDir, { recursive: true });
+
+    // Save metadata to DB
+    this.saveRepo.upsert(slot, {
+      playerName: game.player.name,
+      turn: game.turn,
+      region: world?.currentRegion ?? '',
+      world: world?.name ?? '',
+    });
+
+    // Copy DB file
+    const dbSrc = path.join(process.cwd(), 'data', 'talking-legend.db');
+    const dbDst = path.join(savesDir, `slot_${slot}.db`);
+    fs.copyFileSync(dbSrc, dbDst);
+
+    // Copy narrative log if it exists
+    const narrativeSrc = path.join(process.cwd(), 'data', 'games', gameId, 'narrative.log');
+    const narrativeDst = path.join(savesDir, `slot_${slot}.narrative.log`);
+    if (fs.existsSync(narrativeSrc)) {
+      fs.copyFileSync(narrativeSrc, narrativeDst);
+    }
+
+    const meta = this.saveRepo.findBySlot(slot)!;
+    this.logger.log(`Game saved: gameId=${gameId} slot=${slot} turn=${game.turn}`);
+    return { success: true, meta };
+  }
+
+  /**
+   * List all save slots.
+   */
+  listSaves(): SaveRecord[] {
+    return this.saveRepo.findAll();
+  }
+
+  /**
+   * Verify that a save file exists and return its meta.
+   * The actual DB swap (copy save file over main DB) happens in the controller.
+   */
+  loadSave(slot: number): { success: boolean; meta: SaveRecord } {
+    const meta = this.saveRepo.findBySlot(slot);
+    if (!meta) throw new NotFoundException(`Save slot ${slot} not found`);
+
+    const savePath = path.join(process.cwd(), 'data', 'saves', `slot_${slot}.db`);
+    if (!fs.existsSync(savePath)) {
+      throw new NotFoundException(`Save file not found for slot ${slot}`);
+    }
+
+    return { success: true, meta };
+  }
+
+  /**
+   * Delete a save slot — removes DB row and file.
+   */
+  async deleteSave(slot: number): Promise<void> {
+    this.saveRepo.delete(slot);
+
+    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    const dbPath = path.join(savesDir, `slot_${slot}.db`);
+    const narrativePath = path.join(savesDir, `slot_${slot}.narrative.log`);
+
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    if (fs.existsSync(narrativePath)) fs.unlinkSync(narrativePath);
+
+    this.logger.log(`Save deleted: slot=${slot}`);
+  }
+
+  /**
+   * Auto-save to slot 0. Fire-and-forget (errors caught silently).
+   */
+  async autoSave(gameId: string): Promise<void> {
+    try {
+      await this.saveGame(gameId, 0);
+    } catch (err) {
+      this.logger.warn(`Auto-save failed for gameId=${gameId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

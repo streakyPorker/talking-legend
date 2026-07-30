@@ -149,6 +149,22 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: 'saves_table',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saves (
+          slot        INTEGER PRIMARY KEY,
+          player_name TEXT NOT NULL,
+          turn        INTEGER NOT NULL,
+          region      TEXT NOT NULL,
+          world       TEXT NOT NULL,
+          saved_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
 ];
 
 /**

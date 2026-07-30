@@ -1,14 +1,19 @@
 import {
   Controller,
+  Get,
   Post,
+  Delete,
   Body,
   Param,
   Res,
   HttpCode,
   HttpStatus,
   HttpException,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import type {
   APIResponse,
   CreateGameResponse,
@@ -75,5 +80,38 @@ export class GameController {
     } finally {
       if (!res.writableEnded) res.end();
     }
+  }
+
+  // ── Save / Load ───────────────────────────────────────────────
+
+  @Get(':id/saves')
+  async listSaves(@Param('id') _id: string) {
+    return { success: true, data: this.gameService.listSaves() };
+  }
+
+  @Post(':id/save')
+  async save(@Param('id') id: string, @Body() body: { slot: number }) {
+    const result = await this.gameService.saveGame(id, body.slot);
+    return { success: true, data: result };
+  }
+
+  @Post('saves/:slot/load')
+  async load(@Param('slot') slot: string) {
+    const saveSlot = parseInt(slot, 10);
+    // Verify save exists
+    this.gameService.loadSave(saveSlot);
+
+    // Copy save file over main DB
+    const savePath = path.join(process.cwd(), 'data', 'saves', `slot_${saveSlot}.db`);
+    const dbPath = path.join(process.cwd(), 'data', 'talking-legend.db');
+    if (!fs.existsSync(savePath)) throw new NotFoundException('Save not found');
+    fs.copyFileSync(savePath, dbPath);
+    return { success: true, data: { message: '存档已加载，即将跳转' } };
+  }
+
+  @Delete('saves/:slot')
+  async deleteSave(@Param('slot') slot: string) {
+    await this.gameService.deleteSave(parseInt(slot, 10));
+    return { success: true, data: { message: '已删除' } };
   }
 }

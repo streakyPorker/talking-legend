@@ -150,3 +150,40 @@ export async function moveToRegion(
   if (!res.ok) throw new Error('移动失败');
   return res.json();
 }
+
+// === Save System ===
+
+export interface SaveMeta {
+  slot: number;
+  player_name: string;
+  turn: number;
+  region: string;
+  world: string;
+  saved_at: string;
+}
+
+export async function listSaves(gameId: string): Promise<SaveMeta[]> {
+  const res = await fetch(`${API_BASE}/game/${gameId}/saves`);
+  if (!res.ok) throw new Error('Failed to list saves');
+  const body = await res.json();
+  return body.data ?? [];
+}
+
+export async function saveGame(gameId: string, slot: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/game/${gameId}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slot }),
+  });
+  if (!res.ok) throw new Error('Save failed');
+}
+
+export async function loadSave(slot: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/game/saves/${slot}/load`, { method: 'POST' });
+  if (!res.ok) throw new Error('Load failed');
+}
+
+export async function deleteSave(slot: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/game/saves/${slot}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Delete failed');
+}

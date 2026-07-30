@@ -11,6 +11,7 @@ import { NpcRepository } from '../db/repositories/npc.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
 import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { TravelLogRepository } from '../db/repositories/travel-log.repository';
+import { SaveRepository } from '../db/repositories/save.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
 import type { ConfigService } from '../config/config.service';
 
@@ -113,6 +114,7 @@ describe('GameService', () => {
       mockGmEngine,
       {} as never,  // WorldService mock
       new TravelLogRepository(db),
+      new SaveRepository(db),
     );
   }
 

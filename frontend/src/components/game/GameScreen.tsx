@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { GameState } from '@talking-legend/shared';
 import { useGameStore } from '../../stores/gameStore.js';
@@ -7,7 +7,9 @@ import { GameHeader } from './GameHeader.js';
 import { NarrativePanel } from './NarrativePanel.js';
 import { RegionSidebar } from './RegionSidebar.js';
 import { ActionBar } from './ActionBar.js';
+import { SaveManager } from './SaveManager.js';
 import { Toast, ToastContainer } from '../ui/Toast.js';
+import { saveGame } from '../../services/api.js';
 
 interface GameScreenProps {
   onOpenConfig: () => void;
@@ -37,6 +39,23 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
   // API error → toast (auto-dismiss + persist across multiple errors)
   const [errorKey, setErrorKey] = useState(0);
   const dismissError = useCallback(() => setErrorKey((k) => k + 1), []);
+  const [showSaves, setShowSaves] = useState(false);
+
+  // Auto-save: every 5 turns
+  const [saveToast, setSaveToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const dismissSaveToast = useCallback(() => setSaveToast(null), []);
+  const prevTurnRef = useRef(gameState?.turn ?? 0);
+  useEffect(() => {
+    const currentTurn = gameState?.turn ?? 0;
+    if (currentTurn > 0 && currentTurn !== prevTurnRef.current && currentTurn % 5 === 0) {
+      prevTurnRef.current = currentTurn;
+      saveGame(gameState?.id ?? '', 0)
+        .then(() => setSaveToast({ message: '自动存档成功', type: 'success' }))
+        .catch(() => setSaveToast({ message: '自动存档失败', type: 'error' }));
+    } else {
+      prevTurnRef.current = currentTurn;
+    }
+  }, [gameState?.turn, gameState?.id]);
 
   if (!gameState) {
     return null;
@@ -44,7 +63,7 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
 
   return (
     <div className="h-screen flex flex-col">
-      <GameHeader onOpenConfig={onOpenConfig} />
+      <GameHeader onOpenConfig={onOpenConfig} onOpenSaves={() => setShowSaves(true)} />
       {toolToast && (
         <div className="alert alert-info rounded-none border-0 text-sm py-2">
           <span className="loading loading-spinner loading-xs"></span>
@@ -67,7 +86,16 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
             onDismiss={dismissError}
           />
         )}
+        {saveToast && (
+          <Toast
+            message={saveToast.message}
+            type={saveToast.type}
+            onDismiss={dismissSaveToast}
+          />
+        )}
       </ToastContainer>
+
+      <SaveManager isOpen={showSaves} onClose={() => setShowSaves(false)} gameId={gameState.id} />
     </div>
   );
 }

@@ -3,9 +3,10 @@ import { GameStatusBar } from './GameStatusBar.js';
 
 interface GameHeaderProps {
   onOpenConfig: () => void;
+  onOpenSaves?: () => void;
 }
 
-export function GameHeader({ onOpenConfig }: GameHeaderProps) {
+export function GameHeader({ onOpenConfig, onOpenSaves }: GameHeaderProps) {
   const gameState = useGameStore((s) => s.gameState);
   if (!gameState) return null;
 
@@ -14,6 +15,13 @@ export function GameHeader({ onOpenConfig }: GameHeaderProps) {
       <h1 className="font-title text-primary text-xl">{gameState.world.name}</h1>
       <div className="flex items-center gap-2">
         <GameStatusBar />
+        <button
+          onClick={onOpenSaves}
+          className="btn btn-ghost btn-circle text-2xl"
+          aria-label="打开存档"
+        >
+          💾
+        </button>
         <button
           onClick={onOpenConfig}
           className="btn btn-ghost btn-circle text-2xl"
