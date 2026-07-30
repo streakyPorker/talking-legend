@@ -68,6 +68,7 @@ interface MockDeps {
   storylineRepo: { findByGameId: ReturnType<typeof vi.fn> };
   worldConfig: { getWorld: ReturnType<typeof vi.fn> };
   narrativeService: { getRecentHistory: ReturnType<typeof vi.fn> };
+  travelLogRepo: { getRecent: ReturnType<typeof vi.fn> };
 }
 
 function createProvider(overrides: Partial<MockDeps> = {}): { provider: ContextProvider; deps: MockDeps } {
@@ -78,6 +79,7 @@ function createProvider(overrides: Partial<MockDeps> = {}): { provider: ContextP
     storylineRepo: { findByGameId: vi.fn().mockReturnValue(undefined) },
     worldConfig: { getWorld: vi.fn().mockReturnValue(undefined) },
     narrativeService: { getRecentHistory: vi.fn().mockReturnValue('') },
+    travelLogRepo: { getRecent: vi.fn().mockReturnValue([]) },
     ...overrides,
   };
 
@@ -92,6 +94,7 @@ function createProvider(overrides: Partial<MockDeps> = {}): { provider: ContextP
     deps.storylineRepo as never,
     deps.worldConfig as never,
     deps.narrativeService as never,
+    deps.travelLogRepo as never,
   );
 
   return { provider, deps };

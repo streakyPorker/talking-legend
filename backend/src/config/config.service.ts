@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -8,7 +9,7 @@ interface SettingsFile { env?: Record<string, string>; }
 
 @Injectable()
 export class ConfigService {
-  private readonly logger = new Logger(ConfigService.name);
+  private readonly logger = new LegendLogger(ConfigService.name);
   private settings: SettingsFile | null = null;
   private toml: Record<string, unknown> = {};
 
@@ -59,7 +60,7 @@ export class ConfigService {
 
   // ── 公开 getter ──────────────────────────────────────────────
 
-  get port(): number { return this.getNum('server.port', 'PORT', 30001); }
+  get port(): number { return this.getNum('server.port', 'PORT', 31943); }
 
   /** 去除模型名末尾的可选后缀如 [1M]、[128K] */
   private cleanModel(name: string): string { return name.replace(/\[.*\]$/, '').trim(); }

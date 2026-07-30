@@ -6,6 +6,7 @@
  */
 
 import { Injectable, Inject } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import { LLMClient } from './client';
 import { TemplateEngine } from '../prompts/template-engine';
 import type { AssembledContext } from '../context/context-module.interface';
@@ -25,6 +26,8 @@ export type GMStreamEvent = GMChunkEvent | GMDoneEvent;
 
 @Injectable()
 export class GMEngine {
+  private readonly logger = new LegendLogger(GMEngine.name);
+
   constructor(
     private readonly llmClient: LLMClient,
     private readonly templateEngine: TemplateEngine,
@@ -45,9 +48,12 @@ export class GMEngine {
     // 1. 构建系统 prompt
     let ctx: AssembledContext;
     try {
+      this.logger.debug(`Building GM context for gameId=${gameId}`);
       ctx = await this.contextProvider.buildGMContext(gameId, 180_000);
+      this.logger.debug(`Context built, tokenEstimate=${ctx.tokenEstimate}`);
     } catch (err) {
       // 上下文构建失败 → 降级
+      this.logger.warn(`Context build failed for gameId=${gameId}, action=${action}, using fallback`);
       const fallback = this.fallbackNarrative(action);
       yield { type: 'chunk', content: fallback };
       yield { type: 'done', turn, tokenEstimate: 0 };
@@ -64,6 +70,8 @@ export class GMEngine {
       userParams,
       GM_NARRATIVE_USER_PARAMS,
     );
+    this.logger.debug(`User prompt rendered: ${userPrompt.slice(0, 200)}${userPrompt.length > 200 ? '...' : ''}`);
+    this.logger.log(`GM generate started: gameId=${gameId} action=${action} turn=${turn}`);
 
     // 3. 流式 LLM 调用
     let fullText = '';
@@ -84,6 +92,8 @@ export class GMEngine {
         }
       }
     } catch (err) {
+      this.logger.error(`LLM stream error: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(`Using fallback narrative for action=${action}`);
       const fallback = this.fallbackNarrative(action);
       fullText = fallback;
       yield { type: 'chunk', content: fallback };
@@ -129,11 +139,16 @@ export class GMEngine {
     const startTime = Date.now();
     const MAX_CONSECUTIVE_FAILURES = 3;
 
+    this.logger.log(`GM generateWithTools started: gameId=${gameId} action=${action}`);
+    const tools = this.toolRegistry.getToolsForLLM();
+    this.logger.debug(`Tools available: [${tools.map(t => t.name).join(', ')}]`);
+
     // Build context same as generate()
     let ctx: AssembledContext;
     try {
       ctx = await this.contextProvider.buildGMContext(gameId, 180_000);
     } catch {
+      this.logger.warn(`Context build failed (generateWithTools) for gameId=${gameId}, action=${action}, using fallback`);
       yield { type: 'chunk', content: this.fallbackNarrative(action) };
       yield { type: 'done', turn, tokenEstimate: 0 };
       return;
@@ -154,10 +169,12 @@ export class GMEngine {
     let consecutiveFailures = 0;
     let fullText = '';
     let apiUsage: { inputTokens: number; outputTokens: number } | null = null;
-    const tools = this.toolRegistry.getToolsForLLM();
 
     // Tool use loop
+    let iteration = 0;
     while (true) {
+      iteration++;
+      this.logger.debug(`Tool use loop iteration ${iteration}`);
       let hasToolUse = false;
 
       try {
@@ -177,10 +194,12 @@ export class GMEngine {
             yield { type: 'chunk', content: event.content };
           } else if (event.type === 'tool_use') {
             hasToolUse = true;
+            this.logger.log(`Tool called: name=${event.name} args=${JSON.stringify(event.input)}`);
             yield { type: 'tool_call', name: event.name, args: event.input };
 
             // Execute tool
             const result = await this.toolRegistry.execute(event.name, gameId, event.input);
+            this.logger.log(`Tool result: success=${result.success} message=${result.message}`);
             yield { type: 'tool_result', success: result.success, message: result.message, stateChanges: result.stateChanges };
 
             if (result.success) {
@@ -207,6 +226,8 @@ export class GMEngine {
           }
         }
       } catch (err) {
+        this.logger.error(`LLM stream error (generateWithTools): ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.warn(`Using fallback narrative for action=${action}`);
         const fallback = this.fallbackNarrative(action);
         fullText = fallback;
         yield { type: 'chunk', content: fallback };
@@ -215,6 +236,7 @@ export class GMEngine {
 
       // Stop conditions
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        this.logger.warn(`Max consecutive failures (${MAX_CONSECUTIVE_FAILURES}) reached, halting tool use loop`);
         yield { type: 'chunk', content: '\n\n（多次操作失败，行动被迫中断。）' };
         break;
       }
@@ -233,6 +255,7 @@ export class GMEngine {
     } catch { /* silent */ }
     try { this.narrativeService.append(gameId, finalTurn, fullText); } catch { /* silent */ }
 
+    this.logger.log(`GM generateWithTools done: turn=${finalTurn} tokenEstimate=${ctx.tokenEstimate}`);
     yield { type: 'done', turn: finalTurn, tokenEstimate: ctx.tokenEstimate, ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}) };
   }
 

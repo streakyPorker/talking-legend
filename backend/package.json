@@ -16,10 +16,12 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/serve-static": "^5.0.5",
     "@talking-legend/shared": "*",
     "@types/express": "^5.0.6",
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
+    "express": "^5.2.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^3.23.8"

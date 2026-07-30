@@ -9,10 +9,15 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -n be,fe \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev -w frontend",
     "dev:backend": "npm run dev -w backend",
     "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
+    "start": "npm run stop && npm run build && node scripts/start-backend.mjs --clean",
+    "backend": "npm run build && node scripts/start-backend.mjs --clean",
+    "restart": "npm run start",
+    "hot": "npm run stop && npm run build && npm run dev",
+    "stop": "node scripts/kill-ports.mjs 31943 31944 31945 31946",
     "lint": "npm run lint -ws",
     "typecheck": "npm run typecheck -ws",
     "test": "npm run test -ws"

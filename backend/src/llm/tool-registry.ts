@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import type { GameTool, ToolResult, AnthropicTool } from './tool.interface';
 
 @Injectable()
 export class ToolRegistry {
-  private readonly logger = new Logger(ToolRegistry.name);
+  private readonly logger = new LegendLogger(ToolRegistry.name);
   private readonly tools = new Map<string, GameTool>();
 
   register(tool: GameTool): void {

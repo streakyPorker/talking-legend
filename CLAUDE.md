@@ -17,17 +17,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Requires Node.js >= 18. npm workspaces monorepo (`shared` / `backend` / `frontend`) — run from repo root with `-w <workspace>`, or `cd` into the workspace.
 
+**前后端已合并为单端口**：后端 (:31943) 托管前端静态文件，不再需要单独开前端端口。
+
 | Task | Command |
 |------|---------|
 | Install | `npm install` |
-| 一键拉起 | `bash dev.sh` — 构建+启动前后台 (:30000 + :30001) |
-| 仅后台 | `bash dev.sh backend` |
-| 仅前台 | `bash dev.sh frontend` |
-| 重拉 | `bash dev.sh restart` — kill + 重建 + 启动 |
-| 热更新 | `bash dev.sh hot` — watch 编译 + 自动重启 |
-| 停止 | `bash dev.sh stop` |
+| 一键拉起 | `npm start` — 构建+启动，访问 http://localhost:31943 |
+| 重拉 | `npm run restart` — kill + 重建 + 启动 |
+| 热更新 | `npm run hot` — kill + 构建 + watch 双进程（Vite HMR :31944 + 后端 :31943） |
+| 停止 | `npm run stop` |
 | Build all | `npm run build` — shared → backend → frontend |
-| 并发 dev（不删DB） | `npm run dev` — backend watch + frontend dev，跳过构建，保留数据库 |
+| 并发 dev（不删DB） | `npm run dev` — backend watch + Vite HMR，跳过构建，保留数据库 |
 | Backend prod | `npm run start -w backend` — 运行已构建的 dist |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
@@ -38,9 +38,9 @@ Requires Node.js >= 18. npm workspaces monorepo (`shared` / `backend` / `fronten
 Backend gotchas:
 - Use the npm scripts only. Do NOT run via `tsx` (breaks NestJS decorator metadata) or `nest start` (workspace path issues) — see git history.
 - Compilation is SWC (`.swcrc`: legacy decorators + decorator metadata, CommonJS out); `tsc` is typecheck-only.
-- `bash dev.sh` (start/backend/restart/hot) **deletes `data/talking-legend.db`** on each run. Use `npm run dev` or `bash dev.sh frontend` to preserve data.
+- `npm start` / `npm run restart` / `npm run hot` **delete `data/talking-legend.db`** on each run. Use `npm run dev` to preserve data.
 - LLM config does NOT come from a `.env` file. Priority: `env var` > `~/.claude/settings.json` (env block) > `config.toml` > hardcoded defaults. Without it the backend logs "skeleton mode".
-- SQLite file lands at `<cwd>/data/talking-legend.db`; start the backend from `backend/` so data stays in `backend/data/`.
+- SQLite file lands at `backend/data/talking-legend.db`.
 
 ## Config
 
@@ -48,7 +48,7 @@ Backend gotchas:
 
 | Section | Key | Default |
 |---------|-----|---------|
-| `[server]` | `port` | `30001` |
+| `[server]` | `port` | `31943` |
 | `[anthropic]` | `base_url`, `opus_model`, `sonnet_model`, `haiku_model` | `api.anthropic.com`, claude-opus-4-8, etc. |
 | `[model_tiers]` | `opus`, `sonnet`, `haiku` | prefix lists — includes deepseek models |
 | `[llm.max_tokens]` | `opus` / `sonnet` / `haiku` | 40960 / 5120 / 512 |
@@ -64,15 +64,15 @@ Backend gotchas:
 - **`shared/`** (`@talking-legend/shared`) — TypeScript types + API contracts. Single source of truth for the frontend↔backend wire format. Compiled with `tsc` (no decorators needed); rebuild before typechecking consumers.
 - **`worlds/`** — 世界配置 JSON 文件，每个子目录为一个世界（id = 目录名）。三来源合并装配（内联 + 单文件 + 目录），逐文件容错，装配后统一校验。`WorldConfigService` 在启动时加载；改配置需重启。详见 `worlds/README.md`。
 - **`backend/`** — NestJS 11 + better-sqlite3, global `/api` prefix. Module breakdown:
-  - **Feature modules** (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository. Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests.
-  - **`db/`** — `DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 8 data tables), and exports repositories + the `DB_INSTANCE` token. Multi-write ops run inside `db.transaction(...)`; turn bumps use optimistic concurrency. Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
+  - **Feature modules** (`game`, `npc`, `world`, `storyline`) each follow Controller → Service → Repository. Requests validated by zod schemas (`*.schema.ts`) via a global `ZodValidationPipe`; `AllExceptionsFilter` returns structured errors; `LoggingInterceptor` logs requests. `game/` includes `ContextProvider` (RFC-016: data injection layer reading DB → creating ContextModule instances → registered in Map for `ContextBuilder.build()`), `NarrativeService` (narrative persistence), and SSE streaming endpoints (`POST /:id/action/stream`).
+  - **`db/`** — `DbModule.forRoot()` is `@Global`: opens SQLite in WAL mode, runs versioned migrations from `db/migrate.ts` (tracked in `_schema_version`, each migration transactional, failure aborts startup — 9 data tables: games/worlds/npcs/npc_memories/players/player_quests/storylines/llm_logs/travel_log), and exports repositories + the `DB_INSTANCE` token. Multi-write ops run inside `db.transaction(...)`; turn bumps use optimistic concurrency. Repository specs use `createInMemoryDb()` (`:memory:`) — no Nest bootstrap needed.
   - **`config/`** (RFC-014) — Full NestJS module with `ConfigController` (GET/PUT `/api/config` for the config center page). `ConfigService` resolves values via priority chain: env var > settings.json > config.toml > hardcoded. Supports `reloadToml()` hot-reload without restart.
-  - **`llm/`** — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Key sub-components: `GMEngine` (GM narrative generation), `NpcEngine` (NPC dialogue), `LLMClient` (base HTTP client), `ThinkingHelper` (RFC-013 extended thinking budgets).
+  - **`llm/`** — provider-agnostic client (Anthropic-compatible `/v1/messages`), 30s timeout, 3 retries with exponential backoff, placeholder fallback. Key sub-components: `GMEngine` (GM narrative generation, RFC-016: SSE streaming + tool_use loop), `NpcEngine` (NPC dialogue), `LLMClient` (base HTTP client, `StreamChunk` supports `tool_use`/`chunk`/`usage`/`stream_end`), `ThinkingHelper` (RFC-013 extended thinking budgets). `ToolRegistry` (RFC-016) manages registered `GameTool` instances; `tools/move-to.tool.ts` is the first tool implementation. Tools are registered in `LlmModule.onModuleInit()` and passed to the LLM as Anthropic-format `tools`.
   - **`world-config/`** (RFC-003) — `WorldConfigService` loads world JSON from `worlds/` directory, validates against zod schemas, merges three sources (inline/single-file/directory), skips invalid worlds with `Logger.error`.
-  - **`context/`** (RFC-004) — `ContextBuilder` assembles LLM context from pluggable modules (player-state, world-state, scenario-hint, npc-persona, npc-memory, narrative-history, active-events, intent-input). `MemoryFilter` prunes stale memories. `NarrativeHistory` manages the narrative log. Supports budget enforcement (`ContextBudgetError`).
+  - **`context/`** (RFC-004) — `ContextBuilder` assembles LLM context from pluggable modules (player-state, world-state, scenario-hint, npc-persona, npc-memory, narrative-history, active-events, intent-input, travel-history). `MemoryFilter` prunes stale memories. `NarrativeHistory` manages the narrative log. Supports budget enforcement (`ContextBudgetError`). Modules live under `context/modules/` — each implements `ContextModule` with `gather()`/`render()`/`granularity`.
   - **`prompts/`** (RFC-004) — `TemplateEngine` renders prompt templates with `{{variable}}` interpolation. Templates live under `templates/`: `gm/narrative`, `npc/dialogue`, `intent/classify`, `event/trigger` — each with `system.md` + `user.md` defining expected JSON outputs.
   - **`utils/`** — `id.ts` (uuid generation), `narrative-log.ts` (file-based narrative storage alongside SQLite).
-- **`frontend/`** — React 18 + Vite + TailwindCSS v4 + daisyUI 5. Vite dev server proxies `/api` → `http://localhost:30001`. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client. Zustand installed (RFC-010).
+- **`frontend/`** — React 18 + Vite + TailwindCSS v4 + daisyUI 5. Vite dev server proxies `/api` → `http://localhost:31943`. `App.tsx` switches `GameSetup` ↔ `GameScreen`; `services/api.ts` is the API client (SSE streaming + REST + config). Zustand store (`stores/gameStore.ts`) holds game state + narrative lines. `hooks/useGameAction.ts` (RFC-016) drives SSE action stream with `tool_call`/`tool_result` event handling. Components structured as `components/game/` (GameScreen, GameSetup, ActionBar, ConnectedRegions, NarrativePanel, etc.), `components/ui/` (Button, Input, Toast, Spinner), `components/config/` (ConfigScreen).
 
 Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__tests__/`), frontend `jsdom` + Testing Library (`src/test-setup.ts`).
 
@@ -97,40 +97,11 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 011 | 前端SSE与NPC对话面板 | P2 | 已提议 |
 | 012 | 集成测试与验收 | P3 | 已提议 |
 | 015 | 前端导航栏重构（侧边栏→顶部导航） | P1 | 已提议 |
+| 016 | 地域移动系统 — 点击移动 + LLM tool_use 对话移动 | P1 | 正在进行 |
 
-### 完工铁律（RFC & Bugfix 通用）
+## RFC & Bugfix 流程
 
-**每次 RFC 完工**：
-1. `npm run dev` 成功启动，路由映射全部打印
-2. `curl` 调用核心 API 返回有效响应
-3. 非法请求返回结构化错误
-4. execution.md 粘贴启动日志 + API 响应
-5. **Playwright 中度体验**（必做）→ 检查关键体验问题：重叠、布局错乱、交互断裂、路由跳转异常；截图写入 execution.md
-6. **审视并更新 CLAUDE.md**（必做）→ 见下方"CLAUDE.md 维护清单"
-
-**每次 Bugfix 完工**：
-1. `npm test` 全量通过
-2. `npm run typecheck` 零错误
-3. `npm run build` 编译成功
-4. 验证脚本/手动测试确认 bug 已修复
-5. Bugfix 文件移至 `已修复/` 并写入结果
-6. **Playwright 中度体验**（涉及 UI 的修复必做）→ 确认修复后无新关键体验问题
-7. **审视并更新 CLAUDE.md**（必做）→ 见下方"CLAUDE.md 维护清单"
-
-**Playwright 中度体验清单**：
-- 入口页 (`/`)：布局正常，无重叠，输入框/按钮可用
-- 游戏页 (`/game/:id`)：header 不重叠，侧边栏可见，输入框可用
-- 配置面板：打开/关闭正常，各 section 可展开，保存/重置可操作
-- 路由跳转：`/` ↔ `/game/:id` 正确切换，URL 同步
-- 截图存入 execution.md 或 bugfix 文件
-
-**CLAUDE.md 维护清单**（RFC 和 Bugfix 完工后均须逐项确认）：
-- 新增/删除/重命名的模块、服务、引擎 → 更新 Architecture
-- 新增/变更的命令、npm scripts、dev.sh 行为 → 更新 Commands
-- 新增/变更的配置项、默认值 → 更新 Config
-- 新发现的 gotcha、反模式、注意事项 → 更新 Backend gotchas
-- RFC 进度表状态与实际 `rfcs/` 目录一致
-- 新增的可复用代码模式 → 更新 `.claude/skills/rfc-workflow.md` §可复用代码模式
+> **流程管理由 `lzy-rfc` skill 统一负责**，包括：RFC 三文件结构（proposal/design/execution）、状态流转（已提议→正在进行→已完成）、Bugfix 单文件管理、完工铁律、Playwright 验收清单、CLAUDE.md 维护清单。使用 `/lzy-rfc` 调用。
 
 目标：每次变更后 CLAUDE.md 保持为项目"最新快照"，后续 `/init` 只需读 CLAUDE.md + 几次 codegraph 搜索即可掌握全貌。
 

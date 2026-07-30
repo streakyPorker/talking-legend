@@ -6,8 +6,8 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import * as fs from 'fs';
 import { ConfigService } from './config.service.js';
 
@@ -221,7 +221,7 @@ function applyTomlChange(
 
 @Controller('config')
 export class ConfigController {
-  private readonly logger = new Logger(ConfigController.name);
+  private readonly logger = new LegendLogger(ConfigController.name);
 
   constructor(private readonly configService: ConfigService) {}
 

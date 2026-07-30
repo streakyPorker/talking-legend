@@ -10,6 +10,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
+import { LegendLogger } from '../common/logger/legend.logger';
 
 export interface LLMConfig {
   provider: 'anthropic' | 'openai';
@@ -68,6 +69,8 @@ const DEFAULT_STREAM_TIMEOUT_MS = 60_000;
 
 @Injectable()
 export class LLMClient {
+  private readonly logger = new LegendLogger(LLMClient.name);
+
   constructor(private readonly config: ConfigService) {}
 
   /** Convenience getters for the three model tiers */
@@ -84,22 +87,42 @@ export class LLMClient {
   // ── Non-streaming call (retained from original) ──────────────────────
 
   async call(options: LLMCallOptions): Promise<LLMCallResult> {
+    const model = this.config.llmSonnetModel;
+    this.logger.debug(
+      `LLM call: model=${model} maxTokens=${options.maxTokens ?? 1024} hasTools=${Boolean(options.tools?.length)}`,
+    );
+
     const maxRetries = DEFAULT_MAX_RETRIES;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        return await this._callWithTimeout(options);
+        const startTime = Date.now();
+        const result = await this._callWithTimeout(options);
+        const latency = Date.now() - startTime;
+        this.logger.log(
+          `LLM call completed: inputTokens=${result.usage.inputTokens} outputTokens=${result.usage.outputTokens} latency=${latency}ms`,
+        );
+        return result;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
+          this.logger.debug(
+            `Retry attempt ${attempt + 1} after error: ${lastError.message}`,
+          );
+          this.logger.warn(
+            `LLM call retry ${attempt + 1}/${maxRetries} after: ${lastError.message}`,
+          );
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     }
 
     // All retries exhausted — return a graceful fallback
+    this.logger.error(
+      `LLM call failed after ${maxRetries} retries: ${lastError?.message}`,
+    );
     return this.fallbackResponse(options, lastError);
   }
 
@@ -122,6 +145,11 @@ export class LLMClient {
   async *stream(
     options: LLMCallOptions & { maxTokens?: number; model: string },
   ): AsyncIterable<StreamChunk> {
+    const thinkingBudget = options.thinkingBudget ?? this.defaultThinkingBudget(options.model);
+    this.logger.debug(
+      `LLM stream started: model=${options.model} maxTokens=${options.maxTokens ?? this.getDefaultMaxTokens(options.model)} thinkingBudget=${thinkingBudget}`,
+    );
+
     const controller = new AbortController();
     const timeoutId = setTimeout(
       () => controller.abort(),
@@ -129,7 +157,6 @@ export class LLMClient {
     );
 
     try {
-      const thinkingBudget = options.thinkingBudget ?? this.defaultThinkingBudget(options.model);
       const thinking = thinkingBudget > 0
         ? { type: 'enabled' as const, budget_tokens: thinkingBudget }
         : undefined;
@@ -162,6 +189,7 @@ export class LLMClient {
 
       if (!response.ok) {
         const text = await response.text();
+        this.logger.error(`LLM stream API error status=${response.status}: ${text}`);
         throw new Error(`LLM stream API error ${response.status}: ${text}`);
       }
 
@@ -174,6 +202,9 @@ export class LLMClient {
       let buffer = '';
       // Track tool_use state across SSE events
       let currentToolUse: { name: string; id: string; json: string } | null = null;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let chunkCount = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -205,6 +236,7 @@ export class LLMClient {
               case 'content_block_start': {
                 const block = payload.content_block;
                 if (block?.type === 'tool_use') {
+                  this.logger.debug(`Tool use received: name=${block.name}`);
                   // Flush any pending tool_use before starting a new block
                   if (currentToolUse) {
                     try {
@@ -227,6 +259,7 @@ export class LLMClient {
                 if (delta?.type === 'input_json_delta' && currentToolUse) {
                   currentToolUse.json += delta.partial_json ?? '';
                 } else if (delta?.type === 'text_delta' && delta.text) {
+                  chunkCount++;
                   yield { type: 'chunk', content: delta.text };
                 }
                 // thinking_delta: received but not yielded to caller
@@ -248,16 +281,21 @@ export class LLMClient {
                 }
                 const usage = payload.usage;
                 if (usage) {
+                  totalInputTokens = usage.input_tokens ?? 0;
+                  totalOutputTokens = usage.output_tokens ?? 0;
                   yield {
                     type: 'usage',
-                    inputTokens: usage.input_tokens ?? 0,
-                    outputTokens: usage.output_tokens ?? 0,
+                    inputTokens: totalInputTokens,
+                    outputTokens: totalOutputTokens,
                   };
                 }
                 break;
               }
 
               case 'message_stop':
+                this.logger.log(
+                  `LLM stream completed: inputTokens=${totalInputTokens} outputTokens=${totalOutputTokens} chunks=${chunkCount}`,
+                );
                 yield { type: 'stream_end' };
                 return;
 
@@ -284,6 +322,9 @@ export class LLMClient {
       }
 
       // If the loop ended without message_stop, signal stream_end
+      this.logger.log(
+        `LLM stream completed (no message_stop): inputTokens=${totalInputTokens} outputTokens=${totalOutputTokens} chunks=${chunkCount}`,
+      );
       yield { type: 'stream_end' };
     } finally {
       clearTimeout(timeoutId);
@@ -387,8 +428,8 @@ export class LLMClient {
     _options: LLMCallOptions,
     error: Error | null,
   ): LLMCallResult {
-    console.warn(
-      `[LLM] Falling back to placeholder response. Error: ${error?.message}`,
+    this.logger.warn(
+      `Using fallback response, last error: ${error?.message}`,
     );
     return {
       content: 'The world holds its breath, awaiting the next chapter...',

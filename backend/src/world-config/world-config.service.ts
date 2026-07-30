@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigService } from '../config/config.service';
@@ -16,7 +17,7 @@ import {
 
 @Injectable()
 export class WorldConfigService implements OnModuleInit {
-  private readonly logger = new Logger(WorldConfigService.name);
+  private readonly logger = new LegendLogger(WorldConfigService.name);
   private registry = new Map<string, WorldConfig>();
 
   constructor(private readonly config: ConfigService) {}

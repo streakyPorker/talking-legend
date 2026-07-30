@@ -11,7 +11,7 @@ export class WorldService {
    * 将玩家移动到目标区域。
    * 仅验证连通性 + 更新 currentRegion，调用方负责 turn bump。
    */
-  async moveToRegion(gameId: string, targetRegion: string): Promise<{ fromRegion: string; narrative: string }> {
+  async moveToRegion(gameId: string, targetRegion: string): Promise<{ fromRegion: string; targetName: string; narrative: string }> {
     const world = this.worldRepo.findByGameId(gameId);
     if (!world) throw new Error('游戏不存在');
 
@@ -23,13 +23,15 @@ export class WorldService {
     }
 
     const fromRegion = world.currentRegion;
+    const fromRegionName = currentRegion.name;
     const targetRegionCfg = world.regions.find((r) => r.id === targetRegion);
-    const narrative = `你离开${fromRegion}，前往${targetRegion}。${targetRegionCfg?.description ?? ''}`;
+    const targetName = targetRegionCfg?.name ?? targetRegion;
+    const narrative = `你离开了${fromRegionName}，前往${targetName}。${targetRegionCfg?.description ?? ''}`;
 
     // Update
     this.worldRepo.upsert(gameId, { ...world, currentRegion: targetRegion });
 
-    return { fromRegion, narrative };
+    return { fromRegion, targetName, narrative };
   }
 
   // Placeholder: world tick & state management (RFC-008)

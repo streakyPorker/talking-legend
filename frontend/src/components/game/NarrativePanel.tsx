@@ -4,10 +4,9 @@ import { regionCN } from '../../utils/i18n.js';
 
 interface NarrativePanelProps {
   isLoading: boolean;
-  error: string | null;
 }
 
-export function NarrativePanel({ isLoading, error }: NarrativePanelProps) {
+export function NarrativePanel({ isLoading }: NarrativePanelProps) {
   const narrative = useGameStore((s) => s.narrative);
   const gameState = useGameStore((s) => s.gameState);
 
@@ -23,6 +22,8 @@ export function NarrativePanel({ isLoading, error }: NarrativePanelProps) {
         </p>
       )}
       {narrative.map((line, i) => {
+        if (line.startsWith('[系统]'))
+          return <NarrativeLine key={i} type="system" text={line} />;
         if (line.startsWith('>'))
           return <NarrativeLine key={i} type="player" text={line} />;
         return <NarrativeLine key={i} type="world" text={line} />;
@@ -32,7 +33,6 @@ export function NarrativePanel({ isLoading, error }: NarrativePanelProps) {
           命运之轮转动中…
         </p>
       )}
-      {error && <p className="text-error text-sm">{error}</p>}
     </div>
   );
 }

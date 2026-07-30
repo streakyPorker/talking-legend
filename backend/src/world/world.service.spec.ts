@@ -44,8 +44,8 @@ describe('WorldService', () => {
       const result = await service.moveToRegion('game-1', 'forest');
 
       expect(result.fromRegion).toBe('village');
-      expect(result.narrative).toContain('village');
-      expect(result.narrative).toContain('forest');
+      expect(result.narrative).toContain('Stoneshire');
+      expect(result.narrative).toContain('Dark Wood');
 
       // Verify persistence
       const updated = worldRepo.findByGameId('game-1');
@@ -75,7 +75,7 @@ describe('WorldService', () => {
       // Move back to village (connected from forest)
       const result = await service.moveToRegion('game-1', 'village');
       expect(result.fromRegion).toBe('forest');
-      expect(result.narrative).toContain('village');
+      expect(result.narrative).toContain('Stoneshire');
 
       updated = worldRepo.findByGameId('game-1');
       expect(updated!.currentRegion).toBe('village');

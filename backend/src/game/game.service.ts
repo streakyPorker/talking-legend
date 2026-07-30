@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import type Database from 'better-sqlite3';
 import type {
   CreateGameRequest,
@@ -27,6 +28,7 @@ import { v4 as uuidv4 } from '../utils/id';
 
 @Injectable()
 export class GameService {
+  private readonly logger = new LegendLogger(GameService.name);
   private readonly activeGenerations = new Set<string>();
 
   private getGameState(gameId: string): GameState {
@@ -126,6 +128,8 @@ export class GameService {
     });
     seed();
 
+    this.logger.log(`Game created: ${gameId} player="${playerName}" world="${config.name}"`);
+
     // Assemble the full initial state
     const gameState: GameState = {
       id: gameId,
@@ -143,6 +147,8 @@ export class GameService {
     gameId: string,
     req: GameActionRequest,
   ): Promise<GameActionResponse> {
+    this.logger.debug(`performAction (non-stream): gameId=${gameId} action=${req.action} target=${req.target ?? '(none)'}`);
+
     // Atomic read-modify-write via db.transaction()
     const doAction = this.db.transaction((): { narrative: string; npcResponses: NPCDialogueResponse[]; worldChanges: WorldEvolutionResponse } => {
       const game = this.gameRepo.findById(gameId);
@@ -192,6 +198,7 @@ export class GameService {
   }
 
   async moveToRegion(gameId: string, targetRegion: string, trigger: 'click' | 'dialogue' = 'click'): Promise<MoveResult> {
+    this.logger.log(`Move ${trigger}: ${gameId} → ${targetRegion}`);
     // Delegate to WorldService for data operation
     const result = await this.worldService.moveToRegion(gameId, targetRegion);
 
@@ -215,7 +222,7 @@ export class GameService {
 
     return {
       success: true,
-      message: `前往${targetRegion}`,
+      message: `前往${result.targetName}`,
       narrative: result.narrative,
       gameState,
     };
@@ -226,8 +233,11 @@ export class GameService {
     action: string,
     target?: string,
   ): AsyncIterable<string> {
+    this.logger.debug(`performActionStream: gameId=${gameId} action=${action} target=${target ?? '(none)'}`);
+
     // 并发锁：同一局游戏同一时间只能有一个 GM 生成
     if (this.activeGenerations.has(gameId)) {
+      this.logger.warn(`Generation already active for gameId=${gameId}`);
       throw new ConflictException('GM is already generating for this game');
     }
     this.activeGenerations.add(gameId);
@@ -258,6 +268,9 @@ export class GameService {
         };
       })();
 
+      this.logger.debug(`DB snapshot: turn=${snapshot.turn} region=${snapshot.world?.currentRegion ?? '?'}`);
+      this.logger.log(`GM stream started: gameId=${gameId}`);
+
       // Phase 2: GMEngine generate
       const generator = this.gmEngine.generateWithTools(gameId, action, target, snapshot.turn);
       for await (const event of generator) {
@@ -273,6 +286,11 @@ export class GameService {
           yield JSON.stringify(event);
         }
       }
+
+      this.logger.log(`GM stream completed: gameId=${gameId}`);
+    } catch (err) {
+      this.logger.debug(`GM stream error for gameId=${gameId}: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     } finally {
       this.activeGenerations.delete(gameId);
     }

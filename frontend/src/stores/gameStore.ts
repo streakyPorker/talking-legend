@@ -33,6 +33,6 @@ export const useGameStore = create<GameStore>((set) => ({
       return { narrative: lines };
     }),
   addToolResult: (message) =>
-    set((s) => ({ narrative: [...s.narrative, `[系统] ${message}`] })),
+    set((s) => ({ narrative: [...s.narrative, `[系统] ${message}`, ''] })),
   clearNarrative: () => set({ narrative: [] }),
 }));

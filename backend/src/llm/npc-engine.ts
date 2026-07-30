@@ -6,6 +6,7 @@
  */
 
 import { Injectable, Inject } from '@nestjs/common';
+import { LegendLogger } from '../common/logger/legend.logger';
 import { LLMClient } from './client';
 import type { AssembledContext } from '../context/context-module.interface';
 import { LlmLogRepository } from '../db/repositories/llm-log.repository';
@@ -23,6 +24,8 @@ export type NpcStreamEvent = NpcChunkEvent | NpcDoneEvent;
 
 @Injectable()
 export class NpcEngine {
+  private readonly logger = new LegendLogger(NpcEngine.name);
+
   constructor(
     private readonly llmClient: LLMClient,
     private readonly contextProvider: ContextProvider,
@@ -38,17 +41,21 @@ export class NpcEngine {
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
   ): AsyncIterable<NpcStreamEvent> {
     const startTime = Date.now();
+    this.logger.log(`NPC dialogue: gameId=${gameId} npcId=${npc.id} playerMessage="${playerMessage.slice(0, 80)}"`);
 
     // 1. ContextBuilder 模块管线 → system prompt
     let ctx: AssembledContext;
     try {
       ctx = await this.contextProvider.buildNpcContext(gameId, npc.id, 50_000);
     } catch {
+      this.logger.warn('Using NPC fallback response');
       const fallback = this.fallbackDialogue(npc.name);
       yield { type: 'chunk', content: fallback };
       yield { type: 'done', turn: -1, tokenEstimate: 0 };
       return;
     }
+
+    this.logger.debug(`NPC context built, tokenEstimate=${ctx.tokenEstimate}`);
 
     // 2. User prompt = 对话历史 + 当前消息
     const userPrompt = [
@@ -76,10 +83,15 @@ export class NpcEngine {
         }
       }
     } catch (err) {
-      console.error('[NpcEngine] LLM stream failed:', (err as Error).message || err);
+      this.logger.error(`NPC dialogue LLM error: ${(err as Error).message || err}`);
+      this.logger.warn('Using NPC fallback response');
       const fallback = this.fallbackDialogue(npc.name);
       fullText = fallback;
       yield { type: 'chunk', content: fallback };
+    }
+
+    if (apiUsage) {
+      this.logger.log(`NPC dialogue completed: inputTokens=${apiUsage.inputTokens} outputTokens=${apiUsage.outputTokens}`);
     }
 
     // 4. 后处理（同步，try/catch 静默）

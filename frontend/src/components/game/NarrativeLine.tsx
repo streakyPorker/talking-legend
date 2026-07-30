@@ -1,7 +1,7 @@
-import { renderMarkdown } from '../../utils/markdown.js';
+import { TagRenderer } from './TagRenderer.js';
 
 interface NarrativeLineProps {
-  type: 'player' | 'world';
+  type: 'player' | 'world' | 'system';
   text: string;
 }
 
@@ -10,12 +10,9 @@ export function NarrativeLine({ type, text }: NarrativeLineProps) {
     return <p className="text-primary font-semibold my-3">{text}</p>;
   }
 
-  const paras = text.split('\n\n');
-  return (
-    <div className="text-base-content my-2 mb-4 leading-relaxed">
-      {paras.map((p, j) => (
-        <p key={j}>{renderMarkdown(p)}</p>
-      ))}
-    </div>
-  );
+  if (type === 'system') {
+    return <TagRenderer text={text} />;
+  }
+
+  return <TagRenderer text={text} />;
 }

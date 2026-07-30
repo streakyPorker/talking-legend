@@ -5,10 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: {
-    port: 30000,
+    port: 31944,
     proxy: {
       '/api': {
-        target: 'http://localhost:30001',
+        target: 'http://localhost:31943',
         changeOrigin: true,
       },
     },
