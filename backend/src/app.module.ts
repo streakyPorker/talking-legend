@@ -10,7 +10,7 @@ import { WorldModule } from './world/world.module';
 import { StorylineModule } from './storyline/storyline.module';
 import { LlmModule } from './llm/llm.module';
 import { WorldConfigModule } from './world-config/world-config.module';
-import type { NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { RequestMethod, type NestModule, type MiddlewareConsumer } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -46,6 +46,6 @@ export class AppModule implements NestModule {
         }
         next();
       })
-      .forRoutes('*');
+      .forRoutes({ path: '(.*)', method: RequestMethod.GET });
   }
 }
