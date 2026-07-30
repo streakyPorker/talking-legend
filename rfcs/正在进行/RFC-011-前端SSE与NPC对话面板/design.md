@@ -14,13 +14,16 @@
 | 4 | 流式 | SSE 逐字 + XML `<dialogue>` 标签渲染 |
 | 5 | Prompt | 模板驱动，从 DB 属性自动组装（兼容动态 NPC） |
 | 6 | 持久化 | DB 为主，worlds JSON 只是种子 |
-| 7 | 记忆 | DB 持久化 + importance 分级 |
+| 7 | 记忆 | DB 持久化 + importance 分级，永久不衰减 |
 | 8 | 工具 | 本期搭框架 NpcEngine.generateWithTools()，无工具实例 |
-| 9 | 情绪 | LLM `[mood:xxx]` 标记驱动（NpcEngine 已有） |
-| 10 | 模型 | 对话: sonnet / 摘要: haiku |
-| 11 | 并发 | 前端交互互斥；后端锁保留；未来 GM 异步演化子 agent |
-| 12 | 事件感知 | 结构化事件 feed: 硬编码+LLM提取，区域范围，永久+重要性过滤 |
+| 9 | 情绪 | LLM `[mood:xxx]` + SSE `mood_change` 实时推送前端 |
+| 10 | 模型 | 对话 sonnet/50K, 摘要 haiku |
+| 11 | 并发 | 前端交互互斥；后端锁保留 |
+| 12 | 事件感知 | 结构化 feed: 硬编码+LLM提取，区域范围，永久+importance过滤 |
 | 13 | 上下文 | 世界状态 + 事件feed + 玩家状态 + 同区域 NPC |
+| 14 | SSE协议 | 新富协议: `dialogue_chunk`/`mood_change`/`done`/`error` |
+| 15 | 中断 | 关闭抽屉=abort SSE + 保存已接收内容到记忆 |
+| 16 | 记忆展示 | 抽屉头部折叠: 默认收起显示最新1条摘要，点击展开 |
 | 14 | 动态NPC | 属性同构，统一走 DB → 模板 → prompt |
 
 ---
@@ -168,6 +171,44 @@ NpcContextBuilder 注入:
 - `npc_memory` (非强制): 按 importance 排序
 
 NPC 只知道当前区域发生的事，不知道远方情况。
+
+## 14. SSE 协议
+
+新富协议，为未来扩展预留空间：
+
+| 事件 | 字段 | 触发 |
+|------|------|------|
+| `dialogue_chunk` | `{ speaker, content }` | 逐字流式文本 |
+| `mood_change` | `{ mood }` | NPC 情绪变化 → 前端抽屉头部实时换 emoji |
+| `done` | `{ turn, tokenEstimate, inputTokens, outputTokens }` | 对话完成 |
+| `error` | `{ message }` | 错误 |
+
+后端 NpcEngine 当前产生 `{ type: 'chunk', content }` / `{ type: 'done' }` → 扩展为上述格式。
+
+## 15. 对话中断
+
+- 关闭抽屉 → 前端 `reader.cancel()` abort SSE
+- 后端检测连接断开 → 停止生成
+- 前端保留已接收的气泡内容
+- 已接收内容写入 `npc_memories`（与正常结束一样）
+- 不产生摘要（对话未完成）
+
+## 16. 记忆展示
+
+- 抽屉头部折叠区域：
+  - 默认收起：显示最新 1 条记忆摘要（如 "📝 警告过玩家龙脊峰危险"）
+  - 点击展开：完整列表按 importance 降序
+  - 每条: icon + 摘要文本 + 时间标签
+- 无记忆时：显示 "初次见面"
+- 加载: 抽屉打开时调 `GET /api/game/:id/npc/:npcId/memories`
+
+## 17. 摘要端点
+
+`POST /api/game/:id/npc/:npcId/summary`:
+- 前端在 `done` 事件后 fire-and-forget 调此端点
+- body: `{ dialogue: [...messages], npcId, playerName }`
+- 后端: haiku 生成一句话摘要 → 写入 `narrative_history` + `game_events`
+- 失败静默，不影响对话体验
 
 ---
 
