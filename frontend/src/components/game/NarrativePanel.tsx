@@ -22,8 +22,6 @@ export function NarrativePanel({ isLoading }: NarrativePanelProps) {
         </p>
       )}
       {narrative.map((line, i) => {
-        if (line.startsWith('[系统]'))
-          return <NarrativeLine key={i} type="system" text={line} />;
         if (line.startsWith('>'))
           return <NarrativeLine key={i} type="player" text={line} />;
         return <NarrativeLine key={i} type="world" text={line} />;

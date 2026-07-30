@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import type { GameState } from '@talking-legend/shared';
 import { useGameStore } from '../stores/gameStore.js';
 import { performActionStream } from '../services/api.js';
 
@@ -62,10 +63,7 @@ export function useGameAction() {
             } else if (data.type === 'tool_result') {
               setToolToast(null);
               if (data.success && data.stateChanges?.gameState) {
-                const gs = data.stateChanges.gameState;
-                useGameStore.getState().setGameState(gs);
-                // Also append tool result message to narrative
-                useGameStore.getState().addToolResult(data.message);
+                useGameStore.getState().setGameState(data.stateChanges.gameState as GameState);
               }
             }
           }
