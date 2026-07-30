@@ -1,4 +1,4 @@
-import { Controller, Post, Param, Body, Res, HttpException } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Res, HttpException } from '@nestjs/common';
 import type { Response } from 'express';
 import { NpcService } from './npc.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -39,5 +39,22 @@ export class NpcController {
     } finally {
       if (!res.writableEnded) res.end();
     }
+  }
+
+  @Get(':npcId/memories')
+  async getMemories(@Param('gameId') gameId: string, @Param('npcId') npcId: string) {
+    const memories = this.npcService.getMemories(npcId);
+    return { success: true, data: memories };
+  }
+
+  @Post(':npcId/summary')
+  async submitSummary(
+    @Param('gameId') gameId: string,
+    @Param('npcId') npcId: string,
+    @Body() body: { dialogue: Array<{ role: string; content: string }>; playerName: string },
+  ) {
+    // Fire-and-forget: use haiku to summarize, write to narrative_history + game_events
+    this.npcService.generateSummary(gameId, npcId, body).catch(() => {});
+    return { success: true };
   }
 }

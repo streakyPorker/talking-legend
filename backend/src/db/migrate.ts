@@ -165,6 +165,35 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'npc_memories_extended',
+    up(db: Database.Database) {
+      db.exec(`
+        BEGIN IMMEDIATE;
+
+        ALTER TABLE npc_memories ADD COLUMN importance INTEGER DEFAULT 1;
+        ALTER TABLE npc_memories ADD COLUMN type TEXT DEFAULT 'dialogue';
+
+        CREATE TABLE IF NOT EXISTS game_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          game_id     TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+          type        TEXT NOT NULL,
+          location    TEXT NOT NULL,
+          actors      TEXT NOT NULL DEFAULT '[]',
+          summary     TEXT NOT NULL,
+          importance  INTEGER NOT NULL DEFAULT 1,
+          turn        INTEGER NOT NULL,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_events_game ON game_events(game_id);
+        CREATE INDEX IF NOT EXISTS idx_game_events_location ON game_events(location);
+
+        INSERT INTO _schema_version (version) VALUES (4);
+        COMMIT;
+      `);
+    },
+  },
 ];
 
 /**

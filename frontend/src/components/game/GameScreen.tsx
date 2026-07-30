@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { GameState } from '@talking-legend/shared';
+import type { GameState, NPCState } from '@talking-legend/shared';
 import { useGameStore } from '../../stores/gameStore.js';
 import { useGameAction } from '../../hooks/useGameAction.js';
 import { GameHeader } from './GameHeader.js';
 import { NarrativePanel } from './NarrativePanel.js';
 import { RegionSidebar } from './RegionSidebar.js';
 import { ActionBar } from './ActionBar.js';
+import { NpcDialogueDrawer } from './NpcDialogueDrawer.js';
 import { SaveManager } from './SaveManager.js';
 import { Toast, ToastContainer } from '../ui/Toast.js';
 import { saveGame } from '../../services/api.js';
@@ -35,6 +36,16 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
   }, [gameState, navigate]);
 
   const { execute, isLoading, error, toolToast } = useGameAction();
+  const [selectedNpc, setSelectedNpc] = useState<NPCState | null>(null);
+
+  const handleNpcClick = useCallback(
+    (npc: { id: string; name: string; role: string; personality: string; currentMood: string }) => {
+      if (!gameState) return;
+      const fullNpc = gameState.npcs.find((n) => n.id === npc.id) ?? null;
+      setSelectedNpc(fullNpc);
+    },
+    [gameState],
+  );
 
   // API error → toast (auto-dismiss + persist across multiple errors)
   const [errorKey, setErrorKey] = useState(0);
@@ -72,7 +83,7 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
       )}
       <main className="flex-1 flex gap-4 p-6 overflow-hidden">
         <NarrativePanel isLoading={isLoading} />
-        <RegionSidebar />
+        <RegionSidebar onNpcClick={handleNpcClick} />
       </main>
       <ActionBar onSubmit={execute} isLoading={isLoading} />
 
@@ -96,6 +107,14 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
       </ToastContainer>
 
       <SaveManager isOpen={showSaves} onClose={() => setShowSaves(false)} gameId={gameState.id} />
+
+      <NpcDialogueDrawer
+        npc={selectedNpc}
+        gameId={gameState.id}
+        isOpen={!!selectedNpc}
+        onClose={() => setSelectedNpc(null)}
+        playerName={gameState.player.name}
+      />
     </div>
   );
 }

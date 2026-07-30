@@ -4,7 +4,11 @@ import { ConnectedRegions } from './ConnectedRegions.js';
 import { QuestList } from './QuestList.js';
 import { NearbyNpcs } from './NearbyNpcs.js';
 
-export function RegionSidebar() {
+interface RegionSidebarProps {
+  onNpcClick?: (npc: { id: string; name: string; role: string; personality: string; currentMood: string }) => void;
+}
+
+export function RegionSidebar({ onNpcClick }: RegionSidebarProps) {
   const { width, dragging, onMouseDown } = useResizable({
     initial: 260,
     min: 180,
@@ -28,7 +32,7 @@ export function RegionSidebar() {
       <RegionInfo />
       <ConnectedRegions />
       <QuestList />
-      <NearbyNpcs />
+      <NearbyNpcs onNpcClick={onNpcClick} />
 
       {/* 宽度指示器 */}
       <span className="text-[10px] text-base-content/30 text-right">{width}px</span>

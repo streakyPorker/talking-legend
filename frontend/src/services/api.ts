@@ -77,6 +77,37 @@ export async function talkToNpcStream(
   return response.body.getReader();
 }
 
+// === NPC Dialogue API ===
+
+export interface NpcMemory {
+  id: number;
+  content: string;
+  turn: number;
+  importance: number;
+  type: string;
+  created_at: string;
+}
+
+export async function getNpcMemories(gameId: string, npcId: string): Promise<NpcMemory[]> {
+  const res = await fetch(`${API_BASE}/game/${gameId}/npc/${npcId}/memories`);
+  if (!res.ok) throw new Error('Failed to load memories');
+  const body = await res.json();
+  return body.data ?? [];
+}
+
+export async function submitNpcSummary(
+  gameId: string,
+  npcId: string,
+  dialogue: Array<{ role: string; content: string }>,
+  playerName: string,
+): Promise<void> {
+  fetch(`${API_BASE}/game/${gameId}/npc/${npcId}/summary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dialogue, playerName }),
+  }).catch(() => {});
+}
+
 // === Config Center Types & API ===
 
 export interface ConfigItem {

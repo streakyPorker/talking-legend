@@ -41,7 +41,7 @@ export class NpcRepository {
     this.deleteByGameStmt = db.prepare('DELETE FROM npcs WHERE game_id = ?');
     this.memoriesStmt = db.prepare('SELECT content FROM npc_memories WHERE npc_id = ? ORDER BY turn ASC');
     this.insertMemoryStmt = db.prepare(
-      'INSERT INTO npc_memories (npc_id, content, turn) VALUES (@npc_id, @content, @turn)',
+      'INSERT INTO npc_memories (npc_id, content, turn, importance, type) VALUES (@npc_id, @content, @turn, @importance, @type)',
     );
     this.deleteMemoriesStmt = db.prepare('DELETE FROM npc_memories WHERE npc_id = ?');
   }
@@ -69,7 +69,7 @@ export class NpcRepository {
     });
     // Insert initial memories if any
     for (const memory of npc.memoryOfPlayer) {
-      this.insertMemoryStmt.run({ npc_id: npc.id, content: memory, turn: 0 });
+      this.insertMemoryStmt.run({ npc_id: npc.id, content: memory, turn: 0, importance: 1, type: 'dialogue' });
     }
   }
 
@@ -99,8 +99,8 @@ export class NpcRepository {
     return rows.map((r) => r.content);
   }
 
-  addMemory(npcId: string, content: string, turn: number): void {
-    this.insertMemoryStmt.run({ npc_id: npcId, content, turn });
+  addMemory(npcId: string, content: string, turn: number, importance = 1, type = 'dialogue'): void {
+    this.insertMemoryStmt.run({ npc_id: npcId, content, turn, importance, type });
   }
 
   // ── Private mapping ────────────────────────────────────

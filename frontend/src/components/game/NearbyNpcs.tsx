@@ -1,6 +1,10 @@
 import { useGameStore } from '../../stores/gameStore.js';
 
-export function NearbyNpcs() {
+interface NearbyNpcsProps {
+  onNpcClick?: (npc: { id: string; name: string; role: string; personality: string; currentMood: string }) => void;
+}
+
+export function NearbyNpcs({ onNpcClick }: NearbyNpcsProps) {
   const gameState = useGameStore((s) => s.gameState);
   if (!gameState) return null;
 
@@ -16,7 +20,11 @@ export function NearbyNpcs() {
       {nearby.map((npc) => (
         <div
           key={npc.id}
-          className="flex flex-col p-2 mb-1 bg-base-200 rounded-md border border-base-300"
+          className={`flex flex-col p-2 mb-1 bg-base-200 rounded-md border border-base-300 ${
+            onNpcClick ? 'cursor-pointer hover:bg-base-100' : ''
+          }`}
+          onClick={() => onNpcClick?.(npc)}
+          title={onNpcClick ? '点击对话' : undefined}
         >
           <strong className="text-primary text-sm">{npc.name}</strong>
           <span className="text-base-content/60 text-xs">{npc.role}</span>

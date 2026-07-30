@@ -56,6 +56,8 @@ export interface NpcMemoryRow {
   npc_id: string;
   content: string;
   turn: number;
+  importance: number;       // 1-5, RFC-011
+  type: string;             // RFC-011: 'dialogue' | 'summary' | 'event'
   created_at: string;
 }
 
@@ -107,5 +109,19 @@ export interface LlmLogRow {
   completion_tokens: number;
   latency_ms: number;
   cost_usd: number;
+  created_at: string;
+}
+
+// ── game_events (RFC-011) ─────────────────────────────────
+
+export interface GameEventRow {
+  id: number;
+  game_id: string;
+  type: string;
+  location: string;
+  actors: string;           // JSON: string[]
+  summary: string;
+  importance: number;
+  turn: number;
   created_at: string;
 }
