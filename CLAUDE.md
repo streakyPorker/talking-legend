@@ -97,7 +97,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 011 | 前端SSE与NPC对话面板 | P2 | 已提议 |
 | 012 | 集成测试与验收 | P3 | 已提议 |
 | 015 | 前端导航栏重构（侧边栏→顶部导航） | P1 | 已提议 |
-| 016 | 地域移动系统 — 点击移动 + LLM tool_use 对话移动 | P1 | 正在进行 |
+| 016 | 地域移动系统 — 点击移动 + LLM tool_use 对话移动 | P1 | 已完成 |
 
 ## RFC & Bugfix 流程
 
