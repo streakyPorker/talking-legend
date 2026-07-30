@@ -98,6 +98,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 | 012 | 集成测试与验收 | P3 | 已提议 |
 | 015 | 前端导航栏重构（侧边栏→顶部导航） | P1 | 已提议 |
 | 016 | 地域移动系统 — 点击移动 + LLM tool_use 对话移动 | P1 | 已完成 |
+| 017 | 游戏存档系统 — DB 文件快照 + 槽位管理 | P1 | 正在进行 |
 
 ## RFC & Bugfix 流程
 
