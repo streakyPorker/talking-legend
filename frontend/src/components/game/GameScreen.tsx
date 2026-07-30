@@ -43,7 +43,7 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col">
       <GameHeader onOpenConfig={onOpenConfig} />
       {toolToast && (
         <div className="alert alert-info rounded-none border-0 text-sm py-2">
