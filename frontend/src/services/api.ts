@@ -194,11 +194,11 @@ export async function moveToRegion(
 
 export interface SaveMeta {
   slot: number;
-  player_name: string;
+  playerName: string;
   turn: number;
   region: string;
   world: string;
-  saved_at: string;
+  savedAt: string;
 }
 
 export async function listSaves(gameId: string): Promise<SaveMeta[]> {

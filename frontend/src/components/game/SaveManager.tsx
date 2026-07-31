@@ -111,7 +111,7 @@ export function SaveManager({ isOpen, onClose, gameId }: SaveManagerProps) {
             </span>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
               <span className="text-base-content/70">玩家</span>
-              <span>{save.player_name}</span>
+              <span>{save.playerName}</span>
               <span className="text-base-content/70">回合</span>
               <span>{save.turn}</span>
               <span className="text-base-content/70">区域</span>
@@ -119,7 +119,7 @@ export function SaveManager({ isOpen, onClose, gameId }: SaveManagerProps) {
               <span className="text-base-content/70">世界</span>
               <span>{save.world}</span>
               <span className="text-base-content/70">时间</span>
-              <span>{formatTime(save.saved_at)}</span>
+              <span>{formatTime(save.savedAt)}</span>
             </div>
           </div>
           <div className="flex gap-2 ml-4 shrink-0">
