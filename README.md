@@ -1,69 +1,33 @@
 # Talking Legend
 
-An LLM-native game where your words shape the world. React frontend + TypeScript backend, with world evolution and NPC dialogue powered by large language models.
+LLM 原生文字冒险游戏 —— 你的话语塑造世界。世界演化与 NPC 对话由大模型驱动。
 
-## Project Structure
+## 技术栈
 
-```
-talking-legend/
-├── shared/          # Shared TypeScript types and utilities
-│   └── src/
-│       └── index.ts # Game state types, API contracts
-├── backend/         # Express + TypeScript API server
-│   └── src/
-│       ├── index.ts          # Server entry point
-│       ├── routes/           # API route handlers
-│       ├── services/         # Business logic
-│       ├── llm/              # LLM client abstraction
-│       └── utils/            # Shared utilities
-├── frontend/        # React + Vite + TypeScript
-│   └── src/
-│       ├── App.tsx           # Root component
-│       ├── components/       # React components
-│       ├── services/         # API client
-│       └── index.css         # Base styles
-└── package.json     # Workspace root
-```
+- **frontend/** — React 18 + Vite + TailwindCSS v4 + daisyUI 5
+- **backend/** — NestJS 11 + better-sqlite3（单端口托管前端静态文件）
+- **shared/** — 前后端共享的 TypeScript 类型与 API 契约
+- **worlds/** — 世界配置文件（JSON）
 
-## Getting Started
+## 快速开始
 
-### Prerequisites
-- Node.js >= 18
-- npm >= 9
+要求 Node.js >= 18。
 
-### Install
 ```bash
 npm install
+npm start
 ```
 
-### Development
-```bash
-# Start both frontend and backend
-npm run dev
+构建 + 启动后访问 http://localhost:31943。
 
-# Or start individually
-npm run dev:backend   # http://localhost:3001
-npm run dev:frontend  # http://localhost:3000
-```
+> `npm start` / `npm run restart` 每次会删除 `backend/data/talking-legend.db`。开发调试用 `npm run dev`（保留数据库）。
 
-### Build
-```bash
-npm run build
-```
+常用命令见 `CLAUDE.md`。
 
-### Test
-```bash
-npm run test
-```
+## 配置
 
-## Environment Variables
+LLM 配置不走 `.env`。优先级：环境变量 > `~/.claude/settings.json`（env 块）> `config.toml` > 默认值。完整模板见 `config.default.toml`。
 
-Create a `.env` file in the root with:
+## 文档
 
-```env
-LLM_PROVIDER=anthropic    # or openai
-LLM_API_KEY=your-api-key
-LLM_MODEL=claude-sonnet-4-6
-LLM_BASE_URL=             # optional, for custom endpoints
-PORT=3001                 # backend port
-```
+项目状态、架构、RFC 进度、命令表统一维护在 **`CLAUDE.md`**（本文档保持精简，发布时再补全）。
