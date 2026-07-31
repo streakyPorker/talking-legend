@@ -1,0 +1,69 @@
+# Minimal CI pipeline — lint / typecheck / unit test
+#
+# Each stage is a separate job so its result can be referenced individually
+# as version-gate evidence (see LZY-24 B5 / LZY-25).
+# Extension points (not enabled yet, tracked by the team):
+#   - E2E (Playwright)  -> add a job running `playwright test`
+#   - Build             -> add a job running `npm run build`
+#
+# Notes on stage commands:
+#   - typecheck: the `shared` workspace ships types via `dist/` (gitignored),
+#     so it must be compiled BEFORE dependent workspaces typecheck against it.
+#   - test: `npm run test -ws` would abort on `shared`, which has no test
+#     script/tests yet; `--if-present` skips workspaces without a test script.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+
+  typecheck:
+    name: TypeCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared (prerequisite for dependent typechecks)
+        run: npm run build -w shared
+      - name: TypeCheck
+        run: npm run typecheck
+
+  unit-test:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm run test -ws --if-present
