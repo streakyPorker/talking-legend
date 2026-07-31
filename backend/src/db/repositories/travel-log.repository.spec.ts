@@ -10,6 +10,8 @@ describe('TravelLogRepository', () => {
   beforeEach(() => {
     db = createTestDb();
     repo = new TravelLogRepository(db);
+    // travel_log.game_id 有 FK → 先建 games 记录（g1/g2）
+    db.prepare("INSERT INTO games (id, player_name) VALUES ('g1', 'Test'), ('g2', 'Test')").run();
   });
 
   afterEach(() => {

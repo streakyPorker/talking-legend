@@ -112,7 +112,7 @@ export function migrate(db: Database.Database): void {
     -- 9. travel_log
     CREATE TABLE IF NOT EXISTS travel_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      game_id TEXT NOT NULL,
+      game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
       from_region TEXT NOT NULL,
       to_region TEXT NOT NULL,
       turn INTEGER NOT NULL,

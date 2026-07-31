@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { LegendLogger } from '../common/logger/legend.logger';
 import type Database from 'better-sqlite3';
 import * as fs from 'fs';
@@ -73,7 +73,7 @@ export class GameService {
     @Inject(StorylineRepository) private readonly storylineRepo: StorylineRepository,
     @Inject(WorldConfigService) private readonly worldConfig: WorldConfigService,
     @Inject(GMEngine) private readonly gmEngine: GMEngine,
-    @Inject(forwardRef(() => WorldService)) private readonly worldService: WorldService,
+    @Inject(WorldService) private readonly worldService: WorldService,
     @Inject(TravelLogRepository) private readonly travelLogRepo: TravelLogRepository,
     @Inject(SaveRepository) private readonly saveRepo: SaveRepository,
     @Inject(NarrativeService) private readonly narrativeService: NarrativeService,
