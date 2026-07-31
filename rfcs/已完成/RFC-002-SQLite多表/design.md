@@ -429,3 +429,16 @@ export function createTestDb(): Database {
 | TypeORM | 装饰器实体定义 + 异步 API，同样过度 |
 | Knex.js | query builder 仅在 SQL 动态拼接复杂时有用；本项目查询简单，直接写 SQL 更清晰 |
 | 保持 Map + JSON 文件 dump | 无并发控制、无事务、无查询能力；唯一优势是零依赖，但不满足持久化需求 |
+
+## 防腐化约束（2026-07-31 腐化基线 v2 锚定）
+
+> 来源：LZY-24 腐化基线扫描 v2（锚定 commit `2ed5723`，2026-07-31，双方复核一致）。以下约束是 RFC-002 及其相关代码实现时必须遵守的防腐化清单——这些是**要防的腐化**，不是当前待办，排期随版本消化。基线全文见 LZY-24 评论。
+
+| # | 约束 | 落地要求 | 对应债务 |
+|---|------|---------|---------|
+| 1 | 工具注册单向化 | `GameModule → LlmModule` 单向依赖；工具注册（如 MOVE_TO_TOOL）不得反向注入 GameModule，消除 `forwardRef` 环 | C1 |
+| 2 | Repository 强制通道 | 所有表访问必须经 Repository 公开方法（签名用 Domain 类型）；Service/Controller 不得直查 DB、不得泄漏 Row 类型到 API 面；npc_memories 查询收敛到 NpcRepository 并统一排序语义 | C2 / C3 |
+| 3 | DB 基础设施下沉 | `VACUUM INTO` 快照、DB reset 等基础设施操作下沉到 Db/Save 高层封装，领域服务只调高层 API | C3 |
+| 4 | LLM 调用全量留痕 | 所有 LLM 调用经引擎管线 + `LlmLogRepository` 记录，禁止绕过引擎的直连调用 | C7 |
+
+排期与承接：C2 → LZY-27、C4（前端零测试）→ LZY-26（均 backlog，LZY-25 闭合后 promote）；C1/C3/C7 随 RFC-002 及相关落地实现消化。
