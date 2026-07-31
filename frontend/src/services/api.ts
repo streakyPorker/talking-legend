@@ -198,6 +198,7 @@ export interface SaveMeta {
   turn: number;
   region: string;
   world: string;
+  gameId: string;
   savedAt: string;
 }
 
@@ -217,9 +218,11 @@ export async function saveGame(gameId: string, slot: number): Promise<void> {
   if (!res.ok) throw new Error('Save failed');
 }
 
-export async function loadSave(slot: number): Promise<void> {
+export async function loadSave(slot: number): Promise<{ gameId: string }> {
   const res = await fetch(`${API_BASE}/game/saves/${slot}/load`, { method: 'POST' });
   if (!res.ok) throw new Error('Load failed');
+  const body = await res.json();
+  return body.data;
 }
 
 export async function deleteSave(slot: number): Promise<void> {

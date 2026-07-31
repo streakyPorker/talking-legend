@@ -194,6 +194,13 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'saves_add_game_id',
+    up(db: Database.Database) {
+      db.exec(`ALTER TABLE saves ADD COLUMN game_id TEXT NOT NULL DEFAULT ''`);
+    },
+  },
 ];
 
 /**

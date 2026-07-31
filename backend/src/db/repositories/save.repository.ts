@@ -8,6 +8,7 @@ export interface SaveRecord {
   turn: number;
   region: string;
   world: string;
+  gameId: string;
   savedAt: string;
 }
 
@@ -20,13 +21,14 @@ export class SaveRepository {
 
   constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
     this.upsertStmt = db.prepare(`
-      INSERT INTO saves (slot, player_name, turn, region, world, saved_at)
-      VALUES (@slot, @player_name, @turn, @region, @world, datetime('now'))
+      INSERT INTO saves (slot, player_name, turn, region, world, game_id, saved_at)
+      VALUES (@slot, @player_name, @turn, @region, @world, @game_id, datetime('now'))
       ON CONFLICT(slot) DO UPDATE SET
         player_name = excluded.player_name,
         turn        = excluded.turn,
         region      = excluded.region,
         world       = excluded.world,
+        game_id     = excluded.game_id,
         saved_at    = datetime('now')
     `);
     this.findBySlotStmt = db.prepare('SELECT * FROM saves WHERE slot = ?');
@@ -34,26 +36,27 @@ export class SaveRepository {
     this.deleteStmt = db.prepare('DELETE FROM saves WHERE slot = ?');
   }
 
-  upsert(slot: number, data: { playerName: string; turn: number; region: string; world: string }): void {
+  upsert(slot: number, data: { playerName: string; turn: number; region: string; world: string; gameId: string }): void {
     this.upsertStmt.run({
       slot,
       player_name: data.playerName,
       turn: data.turn,
       region: data.region,
       world: data.world,
+      game_id: data.gameId,
     });
   }
 
   findBySlot(slot: number): SaveRecord | undefined {
     const row = this.findBySlotStmt.get(slot) as
-      | { slot: number; player_name: string; turn: number; region: string; world: string; saved_at: string }
+      | { slot: number; player_name: string; turn: number; region: string; world: string; game_id: string; saved_at: string }
       | undefined;
     return row ? rowToRecord(row) : undefined;
   }
 
   findAll(): SaveRecord[] {
     const rows = this.findAllStmt.all() as Array<{
-      slot: number; player_name: string; turn: number; region: string; world: string; saved_at: string;
+      slot: number; player_name: string; turn: number; region: string; world: string; game_id: string; saved_at: string;
     }>;
     return rows.map(rowToRecord);
   }
@@ -64,7 +67,7 @@ export class SaveRepository {
 }
 
 function rowToRecord(row: {
-  slot: number; player_name: string; turn: number; region: string; world: string; saved_at: string;
+  slot: number; player_name: string; turn: number; region: string; world: string; game_id: string; saved_at: string;
 }): SaveRecord {
   return {
     slot: row.slot,
@@ -72,6 +75,7 @@ function rowToRecord(row: {
     turn: row.turn,
     region: row.region,
     world: row.world,
+    gameId: row.game_id || '',
     savedAt: row.saved_at,
   };
 }

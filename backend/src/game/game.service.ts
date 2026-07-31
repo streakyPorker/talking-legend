@@ -336,6 +336,7 @@ export class GameService {
       turn: game.turn,
       region: world?.currentRegion ?? '',
       world: world?.name ?? '',
+      gameId,
     });
 
     // Copy DB file

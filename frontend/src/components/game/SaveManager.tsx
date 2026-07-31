@@ -58,9 +58,9 @@ export function SaveManager({ isOpen, onClose, gameId }: SaveManagerProps) {
 
   const handleLoad = async (slot: number) => {
     try {
-      await loadSave(slot);
-      setToast({ message: '已读取存档，页面即将刷新', type: 'success' });
-      setTimeout(() => window.location.reload(), 1500);
+      const result = await loadSave(slot);
+      setToast({ message: '已读取存档，正在跳转...', type: 'success' });
+      setTimeout(() => { window.location.href = `/game/${result.gameId}`; }, 1000);
     } catch {
       setToast({ message: '读取存档失败', type: 'error' });
     }

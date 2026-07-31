@@ -103,15 +103,14 @@ export class GameController {
   @Post('saves/:slot/load')
   async load(@Param('slot') slot: string) {
     const saveSlot = parseInt(slot, 10);
-    // Verify save exists
-    this.gameService.loadSave(saveSlot);
-
+    // Get gameId from metadata BEFORE copying file (metadata in current DB)
+    const data = this.gameService.loadSave(saveSlot);
     // Copy save file over main DB
     const savePath = path.join(process.cwd(), 'data', 'saves', `slot_${saveSlot}.db`);
     const dbPath = path.join(process.cwd(), 'data', 'talking-legend.db');
     if (!fs.existsSync(savePath)) throw new NotFoundException('Save not found');
     fs.copyFileSync(savePath, dbPath);
-    return { success: true, data: { message: '存档已加载，即将跳转' } };
+    return { success: true, data: { gameId: data.meta.gameId, message: '存档已加载' } };
   }
 
   @Delete('saves/:slot')
