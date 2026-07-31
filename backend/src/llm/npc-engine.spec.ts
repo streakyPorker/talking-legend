@@ -208,25 +208,6 @@ describe('NpcEngine', () => {
     expect(chunks[0].content).toContain('沉默');
   });
 
-  // ─── Test 3: fallbackDialogue 含 NPC 名 ────────────────────────
-
-  it('fallbackDialogue 文本包含 NPC 名称', () => {
-    // 通过 makeMockContextProvider 构建失败触发降级，验证内容
-    mockContextProvider = makeMockContextProvider(undefined, true);
-    engine = new NpcEngine(
-      mockLlmClient,
-      mockContextProvider,
-      mockLlmLogRepo,
-      mockNpcRepo,
-      mockToolRegistry,
-    );
-
-    const chunks: string[] = [];
-    // generate 现在异步 — 收集事件
-    // 实际上测试 private fallbackDialogue 的最直接方式是让上下文构建失败
-    // 让 LLM stream 也失败确保两种降级同时覆盖
-  });
-
   // ─── Test 4: 情绪更新 — 含 [mood: xxx] 标记 → npcRepo.update ─
 
   it('情绪更新：回复含 [mood: 愤怒] 时 npcRepo.update 被调用', async () => {

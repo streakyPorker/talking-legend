@@ -13,6 +13,7 @@ import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { TravelLogRepository } from '../db/repositories/travel-log.repository';
 import { SaveRepository } from '../db/repositories/save.repository';
 import { WorldConfigService } from '../world-config/world-config.service';
+import { WorldService } from '../world/world.service';
 import type { ConfigService } from '../config/config.service';
 
 // ---------- fixture builders ----------
@@ -112,7 +113,7 @@ describe('GameService', () => {
       storylineRepo,
       worldConfig,
       mockGmEngine,
-      {} as never,  // WorldService mock
+      new WorldService(new WorldRepository(db)),
       new TravelLogRepository(db),
       new SaveRepository(db),
     );
@@ -273,6 +274,182 @@ describe('GameService', () => {
           action: 'look around',
         }),
       ).rejects.toThrow('Game not found');
+    });
+  });
+
+  describe('moveToRegion', () => {
+    it('should move player to connected region and record travel log', async () => {
+      const { gameId } = await service.createGame({ playerName: 'Traveler' });
+
+      // village is connected to forest in aethelgard
+      const result = await service.moveToRegion(gameId, 'forest', 'click');
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('前往');
+      expect(result.narrative).toBeDefined();
+      expect(result.gameState).toBeDefined();
+      expect(result.gameState.world.currentRegion).toBe('forest');
+      // Note: player.location is not updated by moveToRegion — only world.currentRegion changes
+
+      // Verify travel log was recorded
+      const logs = new TravelLogRepository(db).findByGameId(gameId);
+      expect(logs).toHaveLength(1);
+      expect(logs[0].fromRegion).toBe('village');
+      expect(logs[0].toRegion).toBe('forest');
+      expect(logs[0].trigger).toBe('click');
+    });
+
+    it('should fail when target region is not connected', async () => {
+      const { gameId } = await service.createGame({ playerName: 'LostTraveler' });
+
+      // lake only connects to forest, NOT directly to village
+      await expect(
+        service.moveToRegion(gameId, 'lake', 'click'),
+      ).rejects.toThrow('无法到达');
+    });
+
+    it('should persist region change across game state reads', async () => {
+      const { gameId } = await service.createGame({ playerName: 'PersistRegion' });
+
+      // First move: village → forest
+      const firstResult = await service.moveToRegion(gameId, 'forest', 'click');
+      expect(firstResult.gameState.world.currentRegion).toBe('forest');
+
+      // Second move: forest → lake (connected from forest)
+      const secondResult = await service.moveToRegion(gameId, 'lake', 'click');
+      expect(secondResult.gameState.world.currentRegion).toBe('lake');
+
+      // Direct repo read should confirm the region change
+      const worldRepo = new WorldRepository(db);
+      const world = worldRepo.findByGameId(gameId);
+      expect(world).toBeDefined();
+      expect(world!.currentRegion).toBe('lake');
+    });
+  });
+
+  describe('save and load', () => {
+    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    const dbFile = path.join(process.cwd(), 'data', 'talking-legend.db');
+
+    beforeEach(() => {
+      // Create a stub DB file so saveGame can copy it
+      fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+      fs.writeFileSync(dbFile, '', 'utf-8');
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(savesDir)) {
+        fs.rmSync(savesDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(dbFile)) {
+        fs.unlinkSync(dbFile);
+      }
+    });
+
+    it('should save game to slot and reload with same state', async () => {
+      const { gameId } = await service.createGame({ playerName: 'SaveHero' });
+
+      // Advance one turn
+      await service.performAction(gameId, {
+        gameId,
+        action: 'look around',
+      });
+
+      // Move to forest
+      await service.moveToRegion(gameId, 'forest', 'click');
+
+      // Save to slot 1
+      const saveResult = await service.saveGame(gameId, 1);
+      expect(saveResult.success).toBe(true);
+      expect(saveResult.meta.slot).toBe(1);
+      expect(saveResult.meta.playerName).toBe('SaveHero');
+      expect(saveResult.meta.turn).toBe(1);
+      expect(saveResult.meta.region).toBe('forest');
+      expect(saveResult.meta.world).toBe('艾瑟尔加德');
+      expect(saveResult.meta.savedAt).toBeDefined();
+
+      // Verify the save file was created
+      expect(fs.existsSync(path.join(savesDir, 'slot_1.db'))).toBe(true);
+
+      // Load the save
+      const loadResult = service.loadSave(1);
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.meta.slot).toBe(1);
+      expect(loadResult.meta.turn).toBe(1);
+      expect(loadResult.meta.region).toBe('forest');
+    });
+
+    it('should list all saves', async () => {
+      const { gameId } = await service.createGame({ playerName: 'ListHero' });
+
+      // Save to 2 slots
+      await service.saveGame(gameId, 1);
+      await service.saveGame(gameId, 2);
+
+      const saves = service.listSaves();
+      expect(saves).toHaveLength(2);
+
+      const slot1 = saves.find((s) => s.slot === 1);
+      expect(slot1).toBeDefined();
+      expect(slot1!.playerName).toBe('ListHero');
+
+      const slot2 = saves.find((s) => s.slot === 2);
+      expect(slot2).toBeDefined();
+      expect(slot2!.playerName).toBe('ListHero');
+    });
+
+    it('should delete save and free slot', async () => {
+      const { gameId } = await service.createGame({ playerName: 'DeleteHero' });
+
+      await service.saveGame(gameId, 1);
+      await service.saveGame(gameId, 2);
+
+      // Delete slot 1
+      await service.deleteSave(1);
+
+      // Slot 1 should no longer exist
+      const saves = service.listSaves();
+      expect(saves).toHaveLength(1);
+      expect(saves[0].slot).toBe(2);
+
+      // Save file should be gone
+      expect(fs.existsSync(path.join(savesDir, 'slot_1.db'))).toBe(false);
+
+      // Loading deleted slot should throw
+      expect(() => service.loadSave(1)).toThrow('Save slot 1 not found');
+    });
+  });
+
+  describe('auto-save', () => {
+    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    const dbFile = path.join(process.cwd(), 'data', 'talking-legend.db');
+
+    beforeEach(() => {
+      fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+      fs.writeFileSync(dbFile, '', 'utf-8');
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(savesDir)) {
+        fs.rmSync(savesDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(dbFile)) {
+        fs.unlinkSync(dbFile);
+      }
+    });
+
+    it('should auto-save to slot 0', async () => {
+      const { gameId } = await service.createGame({ playerName: 'AutoSaveHero' });
+
+      await service.autoSave(gameId);
+
+      const saveMeta = service.loadSave(0);
+      expect(saveMeta.success).toBe(true);
+      expect(saveMeta.meta.slot).toBe(0);
+      expect(saveMeta.meta.playerName).toBe('AutoSaveHero');
+
+      // Verify the file exists
+      expect(fs.existsSync(path.join(savesDir, 'slot_0.db'))).toBe(true);
     });
   });
 });
