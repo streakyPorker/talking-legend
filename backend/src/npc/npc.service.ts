@@ -25,7 +25,7 @@ export class NpcService {
     @Inject(PlayerRepository) private readonly playerRepo: PlayerRepository,
     @Inject(GameEventsRepository) private readonly gameEventsRepo: GameEventsRepository,
     @Inject(NarrativeService) private readonly narrativeService: NarrativeService,
-    private readonly llmClient: LLMClient,
+    @Inject(LLMClient) private readonly llmClient: LLMClient,
   ) {}
 
   /**

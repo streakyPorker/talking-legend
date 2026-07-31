@@ -262,7 +262,7 @@ describe('NpcService', () => {
 
       // Second call on same NPC should throw ConflictException immediately
       await expect(
-        slowService.talkStream(gameId, npcId, 'Hello again').next(),
+        slowService.talkStream(gameId, npcId, 'Hello again')[Symbol.asyncIterator]().next(),
       ).rejects.toThrow(ConflictException);
     });
   });
