@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import type { GameState, NPCState } from '@talking-legend/shared';
 import { useGameStore } from '../../stores/gameStore.js';
 import { useGameAction } from '../../hooks/useGameAction.js';
@@ -10,30 +10,33 @@ import { ActionBar } from './ActionBar.js';
 import { NpcDialogueDrawer } from './NpcDialogueDrawer.js';
 import { SaveManager } from './SaveManager.js';
 import { Toast, ToastContainer } from '../ui/Toast.js';
-import { saveGame } from '../../services/api.js';
+import { saveGame, getGameState } from '../../services/api.js';
 
 interface GameScreenProps {
   onOpenConfig: () => void;
 }
 
 export function GameScreen({ onOpenConfig }: GameScreenProps) {
-  const location = useLocation();
+  const { gameId: routeGameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const gameState = useGameStore((s) => s.gameState);
   const setGameState = useGameStore((s) => s.setGameState);
 
-  // 从 location.state 恢复游戏状态（兼容旧导航方式）
-  const initialGameState = (location.state as { gameState?: unknown } | null)?.gameState;
-  if (initialGameState && !gameState) {
-    setGameState(initialGameState as GameState);
-  }
-
-  // 无游戏状态则重定向回首页
+  // 刷新恢复: 从 URL gameId 后端加载状态
   useEffect(() => {
-    if (!gameState) {
+    if (!gameState && routeGameId) {
+      getGameState(routeGameId)
+        .then((gs) => setGameState(gs))
+        .catch(() => navigate('/', { replace: true }));
+    }
+  }, [gameState, routeGameId, setGameState, navigate]);
+
+  // 无游戏状态且无 routeGameId → 重定向
+  useEffect(() => {
+    if (!gameState && !routeGameId) {
       navigate('/', { replace: true });
     }
-  }, [gameState, navigate]);
+  }, [gameState, routeGameId, navigate]);
 
   const { execute, isLoading, error, toolToast } = useGameAction();
   const [selectedNpc, setSelectedNpc] = useState<NPCState | null>(null);

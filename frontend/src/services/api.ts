@@ -29,6 +29,14 @@ export async function createGame(playerName: string): Promise<CreateGameResponse
   });
 }
 
+/** 获取游戏状态（刷新恢复用） */
+export async function getGameState(gameId: string): Promise<GameState> {
+  const res = await fetch(`${API_BASE}/game/${encodeURIComponent(gameId)}`);
+  if (!res.ok) throw new Error(`Game not found: ${res.status}`);
+  const body = await res.json();
+  return body.data as GameState;
+}
+
 export async function performAction(
   gameId: string,
   action: string,

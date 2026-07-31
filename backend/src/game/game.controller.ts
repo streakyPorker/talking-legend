@@ -32,6 +32,11 @@ import {
 export class GameController {
   constructor(private readonly gameService: GameService) {}
 
+  @Get(':id')
+  async getState(@Param('id') id: string): Promise<APIResponse<any>> {
+    return { success: true, data: this.gameService.getGameState(id) };
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(

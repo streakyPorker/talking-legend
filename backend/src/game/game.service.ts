@@ -34,7 +34,7 @@ export class GameService {
   private readonly logger = new LegendLogger(GameService.name);
   private readonly activeGenerations = new Set<string>();
 
-  private getGameState(gameId: string): GameState {
+  getGameState(gameId: string): GameState {
     const storedGame = this.gameRepo.findById(gameId);
     if (!storedGame) {
       throw new NotFoundException(`Game not found: ${gameId}`);

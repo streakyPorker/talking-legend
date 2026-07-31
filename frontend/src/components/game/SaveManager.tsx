@@ -4,6 +4,15 @@ import type { SaveMeta } from '../../services/api.js';
 import { Toast, ToastContainer } from '../ui/Toast.js';
 import { regionCN } from '../../utils/i18n.js';
 
+/** SQLite datetime → 本地时间字符串 */
+function formatTime(dt: string): string {
+  try {
+    const d = new Date(dt.replace(' ', 'T') + 'Z');
+    if (isNaN(d.getTime())) return dt;
+    return d.toLocaleString('zh-CN');
+  } catch { return dt; }
+}
+
 interface SaveManagerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -110,7 +119,7 @@ export function SaveManager({ isOpen, onClose, gameId }: SaveManagerProps) {
               <span className="text-base-content/70">世界</span>
               <span>{save.world}</span>
               <span className="text-base-content/70">时间</span>
-              <span>{new Date(save.saved_at).toLocaleString('zh-CN')}</span>
+              <span>{formatTime(save.saved_at)}</span>
             </div>
           </div>
           <div className="flex gap-2 ml-4 shrink-0">
