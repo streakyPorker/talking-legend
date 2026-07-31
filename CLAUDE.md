@@ -104,7 +104,7 @@ Tests: Vitest everywhere — backend `node` env (colocated `*.spec.ts` + `src/__
 
 ## RFC & Bugfix 流程
 
-> **流程管理由 `lzy-rfc` skill 统一负责**，包括：RFC 三文件结构（proposal/design/execution）、状态流转（已提议→正在进行→已完成）、Bugfix 单文件管理、完工铁律、Playwright 验收清单、CLAUDE.md 维护清单。使用 `/lzy-rfc` 调用。
+> **流程管理由 `lzy-ts-harness` skill 统一负责**，包括：RFC 三文件结构（proposal/design/execution）、状态流转（已提议→正在进行→已完成）、Bugfix 单文件管理、完工铁律、Playwright 验收清单、CLAUDE.md 维护清单，以及修复轮 Harness（并行诊断交叉验证 → grill 定范围 → 并发开发 → 多阶段验证 → 评估）。使用 `/lzy-ts-harness` 调用。
 
 目标：每次变更后 CLAUDE.md 保持为项目"最新快照"，后续 `/init` 只需读 CLAUDE.md + 几次 codegraph 搜索即可掌握全貌。
 
