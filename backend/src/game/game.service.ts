@@ -26,6 +26,7 @@ import { WorldConfigService } from '../world-config/world-config.service';
 import { WorldService } from '../world/world.service';
 import { GMEngine } from '../llm/gm-engine';
 import { TravelLogRepository } from '../db/repositories/travel-log.repository';
+import { NarrativeService } from './narrative.service';
 import { SaveRepository, SaveRecord } from '../db/repositories/save.repository';
 import { v4 as uuidv4 } from '../utils/id';
 
@@ -55,6 +56,16 @@ export class GameService {
     };
   }
 
+  /** 获取完整游戏状态（含叙事历史+事件），用于刷新/读档恢复 */
+  getFullState(gameId: string) {
+    const gameState = this.getGameState(gameId);
+    const narrative = this.narrativeService.getRecentHistory(gameId);
+    return {
+      ...gameState,
+      narrative: narrative || '',
+    };
+  }
+
   constructor(
     @Inject(DB_INSTANCE) private readonly db: Database.Database,
     @Inject(GameRepository) private readonly gameRepo: GameRepository,
@@ -67,6 +78,7 @@ export class GameService {
     @Inject(forwardRef(() => WorldService)) private readonly worldService: WorldService,
     @Inject(TravelLogRepository) private readonly travelLogRepo: TravelLogRepository,
     @Inject(SaveRepository) private readonly saveRepo: SaveRepository,
+    @Inject(NarrativeService) private readonly narrativeService: NarrativeService,
   ) {}
 
   async createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
@@ -206,20 +218,22 @@ export class GameService {
     // Delegate to WorldService for data operation
     const result = await this.worldService.moveToRegion(gameId, targetRegion);
 
-    // Get current game state for turn number
-    const game = this.gameRepo.findById(gameId);
-    const currentTurn = game?.turn ?? 0;
+    // Bump turn + update player location (原子操作)
+    this.db.transaction(() => {
+      const game = this.gameRepo.findById(gameId);
+      const newTurn = (game?.turn ?? 0) + 1;
+      this.gameRepo.updateTurn(gameId, newTurn, game?.turn ?? 0);
+      this.playerRepo.updateLocation(gameId, targetRegion);
 
-    // Record travel
-    try {
+      // Record travel
       this.travelLogRepo.insert({
         gameId,
         fromRegion: result.fromRegion,
         toRegion: targetRegion,
-        turn: currentTurn,
+        turn: newTurn,
         trigger,
       });
-    } catch { /* silent */ }
+    })();
 
     // Re-read full game state
     const gameState = await this.getGameState(gameId);

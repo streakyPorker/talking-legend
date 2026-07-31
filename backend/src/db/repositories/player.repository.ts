@@ -20,6 +20,7 @@ export class PlayerRepository {
   private readonly insertQuestStmt: Database.Statement;
   private readonly updateQuestStmt: Database.Statement;
   private readonly deleteQuestsStmt: Database.Statement<[string]>;
+  private readonly updateLocationStmt: Database.Statement;
 
   constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
     this.findStmt = db.prepare('SELECT * FROM players WHERE game_id = ?');
@@ -49,11 +50,16 @@ export class PlayerRepository {
       WHERE id = @id
     `);
     this.deleteQuestsStmt = db.prepare('DELETE FROM player_quests WHERE game_id = ?');
+    this.updateLocationStmt = db.prepare('UPDATE players SET location = ?, updated_at = datetime(\'now\') WHERE game_id = ?');
   }
 
   findByGameId(gameId: string): PlayerState | undefined {
     const row = this.findStmt.get(gameId) as PlayerRow | undefined;
     return row ? this.deserializePlayer(row) : undefined;
+  }
+
+  updateLocation(gameId: string, location: string): void {
+    this.updateLocationStmt.run(location, gameId);
   }
 
   upsert(gameId: string, player: PlayerState): void {

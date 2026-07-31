@@ -7,7 +7,7 @@ import { regionCN } from '../../utils/i18n.js';
 /** SQLite datetime → 本地时间字符串 */
 function formatTime(dt: string): string {
   try {
-    const d = new Date(dt.replace(' ', 'T') + 'Z');
+    const d = new Date(dt.replace(' ', 'T')); // SQLite datetime 是本地时间，不加 Z
     if (isNaN(d.getTime())) return dt;
     return d.toLocaleString('zh-CN');
   } catch { return dt; }

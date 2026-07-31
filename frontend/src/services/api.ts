@@ -29,12 +29,12 @@ export async function createGame(playerName: string): Promise<CreateGameResponse
   });
 }
 
-/** 获取游戏状态（刷新恢复用） */
-export async function getGameState(gameId: string): Promise<GameState> {
+/** 获取完整游戏状态（刷新恢复用，含叙事） */
+export async function getGameState(gameId: string): Promise<GameState & { narrative?: string }> {
   const res = await fetch(`${API_BASE}/game/${encodeURIComponent(gameId)}`);
   if (!res.ok) throw new Error(`Game not found: ${res.status}`);
   const body = await res.json();
-  return body.data as GameState;
+  return body.data as GameState & { narrative?: string };
 }
 
 export async function performAction(

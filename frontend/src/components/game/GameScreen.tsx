@@ -21,15 +21,16 @@ export function GameScreen({ onOpenConfig }: GameScreenProps) {
   const navigate = useNavigate();
   const gameState = useGameStore((s) => s.gameState);
   const setGameState = useGameStore((s) => s.setGameState);
+  const restoreGame = useGameStore((s) => s.restoreGame);
 
-  // 刷新恢复: 从 URL gameId 后端加载状态
+  // 刷新/读档恢复: 从后端加载完整状态（含叙事）
   useEffect(() => {
     if (!gameState && routeGameId) {
       getGameState(routeGameId)
-        .then((gs) => setGameState(gs))
+        .then((full) => restoreGame(full, full.narrative))
         .catch(() => navigate('/', { replace: true }));
     }
-  }, [gameState, routeGameId, setGameState, navigate]);
+  }, [gameState, routeGameId, restoreGame, navigate]);
 
   // 无游戏状态且无 routeGameId → 重定向
   useEffect(() => {

@@ -12,6 +12,7 @@ import { PlayerRepository } from '../db/repositories/player.repository';
 import { StorylineRepository } from '../db/repositories/storyline.repository';
 import { TravelLogRepository } from '../db/repositories/travel-log.repository';
 import { SaveRepository } from '../db/repositories/save.repository';
+import { NarrativeService } from '../game/narrative.service';
 import { WorldConfigService } from '../world-config/world-config.service';
 import { WorldService } from '../world/world.service';
 import type { ConfigService } from '../config/config.service';
@@ -116,6 +117,7 @@ describe('GameService', () => {
       new WorldService(new WorldRepository(db)),
       new TravelLogRepository(db),
       new SaveRepository(db),
+      new NarrativeService({ gameDataDir: tmpRoot } as ConfigService),
     );
   }
 

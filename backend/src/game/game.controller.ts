@@ -34,7 +34,7 @@ export class GameController {
 
   @Get(':id')
   async getState(@Param('id') id: string): Promise<APIResponse<any>> {
-    return { success: true, data: this.gameService.getGameState(id) };
+    return { success: true, data: this.gameService.getFullState(id) };
   }
 
   @Post()
