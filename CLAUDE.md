@@ -6,12 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 >
 > **Agent 模型约定**：
 > - 探索类（Explore）→ `sonnet`。性价比最优，足覆盖代码搜索和架构理解。
-> - 实现类（Implement）→ 并行 `sonnet` agent，文件级隔离（两两不修改同一文件），翻 Wave 依赖。**硬性要求：agent 输出必须零编译错误、零 import 断裂、零未定义引用**——接手即可 typecheck + build 通过。
+> - 实现类（Implement）→ 并行 `sonnet` agent，文件级隔离（两两不修改同一文件），翻 Wave 依赖。**硬性要求：agent 交货必须自带验证结果（typecheck + test 输出），无验证结果的交付视为不合格**——接手即可 typecheck + build 通过。
 > - 审查类（Review）→ 并行 `sonnet` agent，从不同视角对抗审视（功能正确性/回归安全/代码质量）。
 > - 验收类 → Playwright 深度体验（多页面截图 + 交互验证）。
 > - 测试策略 → 现阶段不做回归测试，第一个大版本发布后再考虑。
 >
 > **交互约定**：grill-me 设计访谈使用 `AskUserQuestion` 工具提问，提供推荐选项和理由，让用户做选择题而非开放问答。
+>
+> **子 Agent 交付铁律**：每个 agent prompt 末尾必须包含验证指令（typecheck + test），agent 返回值必须有验证结果。主控抽查 build + dev 启动。
 
 ## Commands
 
