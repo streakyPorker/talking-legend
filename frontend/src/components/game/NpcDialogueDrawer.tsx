@@ -26,7 +26,7 @@ function getMoodEmoji(mood: string): string {
 }
 
 export function NpcDialogueDrawer({ npc, gameId, isOpen, onClose, playerName }: NpcDialogueDrawerProps) {
-  const { messages, isLoading, isStreaming, error, sendMessage, reset, abort } = useNpcDialogue(playerName);
+  const { messages, isLoading, isStreaming, error, sendMessage, reset } = useNpcDialogue(playerName);
   const [input, setInput] = useState('');
   const [memories, setMemories] = useState<NpcMemory[]>([]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
@@ -80,9 +80,8 @@ export function NpcDialogueDrawer({ npc, gameId, isOpen, onClose, playerName }: 
   );
 
   const handleClose = useCallback(() => {
-    abort();
     onClose();
-  }, [abort, onClose]);
+  }, [onClose]);
 
   // Determine latest memory for collapsed preview
   const latestMemory = memories.length > 0

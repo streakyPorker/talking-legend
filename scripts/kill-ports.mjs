@@ -11,7 +11,9 @@ import { platform } from 'os';
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const PID_FILE = join(ROOT, 'backend', 'data', 'legend.pid');
 const isWin = platform() === 'win32';
-const killCmd = isWin ? 'taskkill //F //PID' : 'kill';
+// Windows 下 execSync 在 cmd.exe 里跑，taskkill 必须用单斜杠 /F /PID；
+// //F 是 git-bash 风格转义，传给 cmd 会因参数非法而静默失败（"Stopped 0"）。
+const killCmd = isWin ? 'taskkill /F /PID' : 'kill -9';
 
 let killed = 0;
 

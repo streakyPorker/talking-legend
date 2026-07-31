@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type Database from 'better-sqlite3';
 import { createTestDb } from '../db/test-utils';
+import { DbConnectionManager, boundDatabaseProxy } from '../db/db-connection-manager';
 import { GameService } from '../game/game.service';
 import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
@@ -93,42 +94,59 @@ describe('GameService', () => {
   let tmpRoot: string;
   let worldConfig: WorldConfigService;
   let service: GameService;
+  let manager: DbConnectionManager;
+  let narrativeService: NarrativeService;
 
-  function buildService(): void {
-    worldConfig = new WorldConfigService({ worldsDir: tmpRoot } as ConfigService);
-    worldConfig.loadFromDir(tmpRoot);
-    const storylineRepo = new StorylineRepository(db);
+  function buildService(
+    dbInstance: Database.Database,
+    dbManager: DbConnectionManager,
+    worldsRoot = tmpRoot,
+    narrativeDataDir = tmpRoot,
+  ): GameService {
+    worldConfig = new WorldConfigService({ worldsDir: worldsRoot } as ConfigService);
+    worldConfig.loadFromDir(worldsRoot);
+    const storylineRepo = new StorylineRepository(dbInstance);
     // Mock GMEngine — the integration test does not exercise LLM generation
     const mockGmEngine = {
       generate: async function* () {
         yield { type: 'chunk', content: 'Mock narrative' };
         yield { type: 'done', turn: 1, tokenEstimate: 0 };
       },
+      generateWithTools: async function* () {
+        yield { type: 'chunk', content: 'Mock narrative' };
+        yield { type: 'done', turn: 1, tokenEstimate: 0 };
+      },
     } as unknown as import('../llm/gm-engine').GMEngine;
-    service = new GameService(
-      db,
-      new GameRepository(db),
-      new WorldRepository(db),
-      new NpcRepository(db),
-      new PlayerRepository(db),
+    narrativeService = new NarrativeService({ gameDataDir: narrativeDataDir } as ConfigService);
+    return new GameService(
+      dbInstance,
+      dbManager,
+      new GameRepository(dbInstance),
+      new WorldRepository(dbInstance),
+      new NpcRepository(dbInstance),
+      new PlayerRepository(dbInstance),
       storylineRepo,
       worldConfig,
       mockGmEngine,
-      new WorldService(new WorldRepository(db)),
-      new TravelLogRepository(db),
-      new SaveRepository(db),
-      new NarrativeService({ gameDataDir: tmpRoot } as ConfigService),
+      new WorldService(new WorldRepository(dbInstance)),
+      new TravelLogRepository(dbInstance),
+      new SaveRepository(dbInstance),
+      narrativeService,
     );
   }
 
   beforeEach(() => {
+    // In-memory DB for the non-persist suite; the manager just holds a
+    // production-path witness so the service constructor is well-formed.
     db = createTestDb();
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'game-service-test-'));
     writeAethelgard(tmpRoot);
-    buildService();
+    manager = new DbConnectionManager(path.join(tmpRoot, 'main.db'));
+    service = buildService(db, manager);
   });
 
   afterEach(() => {
+    manager.onModuleDestroy();
     db.close();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
@@ -208,7 +226,7 @@ describe('GameService', () => {
 
     it('uses the specified world when scenario is provided', async () => {
       writeSecondWorld(tmpRoot);
-      buildService();
+      service = buildService(db, manager);
 
       const result = await service.createGame({
         playerName: 'ScenarioHero',
@@ -225,7 +243,7 @@ describe('GameService', () => {
 
     it('throws BadRequestException for unknown scenario, listing available ids', async () => {
       writeSecondWorld(tmpRoot);
-      buildService();
+      service = buildService(db, manager);
 
       await expect(
         service.createGame({ playerName: 'X', scenario: 'nope' }),
@@ -234,7 +252,7 @@ describe('GameService', () => {
 
     it('throws BadRequestException when no world configs are available', async () => {
       fs.rmSync(path.join(tmpRoot, 'aethelgard'), { recursive: true, force: true });
-      buildService();
+      service = buildService(db, manager);
 
       await expect(
         service.createGame({ playerName: 'X' }),
@@ -242,40 +260,27 @@ describe('GameService', () => {
     });
   });
 
-  describe('performAction', () => {
-    it('should process an action and increment turn', async () => {
-      const { gameId } = await service.createGame({ playerName: 'TestHero' });
-      const result = await service.performAction(gameId, {
-        gameId,
-        action: 'explore',
-        target: 'forest',
-      });
-
-      expect(result.narrative).toContain('explore');
-      expect(result.updatedState.turn).toBe(1);
-      expect(result.npcResponses).toEqual([]);
-    });
-
-    it('should persist turn increment to DB', async () => {
+  describe('performActionStream', () => {
+    it('should emit chunks and done events', async () => {
       const { gameId } = await service.createGame({ playerName: 'TestHero' });
 
-      await service.performAction(gameId, {
-        gameId,
-        action: 'look around',
-      });
+      const chunks: string[] = [];
+      for await (const chunk of service.performActionStream(gameId, 'explore', 'forest')) {
+        chunks.push(chunk);
+      }
 
-      const gameRepo = new GameRepository(db);
-      const game = gameRepo.findById(gameId);
-      expect(game!.turn).toBe(1);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks.some((c) => c.includes('Mock narrative'))).toBe(true);
+      expect(chunks.some((c) => JSON.parse(c).type === 'done')).toBe(true);
     });
 
     it('should throw for unknown game ID', async () => {
-      await expect(
-        service.performAction('non-existent-id', {
-          gameId: 'non-existent-id',
-          action: 'look around',
-        }),
-      ).rejects.toThrow('Game not found');
+      await expect(async () => {
+        const gen = service.performActionStream('non-existent-id', 'look around');
+        for await (const _ of gen) {
+          /* drain */
+        }
+      }).rejects.toThrow('Game not found');
     });
   });
 
@@ -291,7 +296,8 @@ describe('GameService', () => {
       expect(result.narrative).toBeDefined();
       expect(result.gameState).toBeDefined();
       expect(result.gameState.world.currentRegion).toBe('forest');
-      // Note: player.location is not updated by moveToRegion — only world.currentRegion changes
+      // RFC-016: player.location is synced to the world region on move
+      expect(result.gameState.player.location).toBe('forest');
 
       // Verify travel log was recorded
       const logs = new TravelLogRepository(db).findByGameId(gameId);
@@ -299,6 +305,32 @@ describe('GameService', () => {
       expect(logs[0].fromRegion).toBe('village');
       expect(logs[0].toRegion).toBe('forest');
       expect(logs[0].trigger).toBe('click');
+      expect(logs[0].turn).toBe(1);
+    });
+
+    it('click move consumes exactly one turn', async () => {
+      const { gameId } = await service.createGame({ playerName: 'TurnCost' });
+      expect(service.getGameState(gameId).turn).toBe(0);
+
+      await service.moveToRegion(gameId, 'forest', 'click');
+      expect(service.getGameState(gameId).turn).toBe(1);
+
+      await service.moveToRegion(gameId, 'lake', 'click');
+      expect(service.getGameState(gameId).turn).toBe(2);
+    });
+
+    it('dialogue move (GM tool) does NOT bump the turn', async () => {
+      const { gameId } = await service.createGame({ playerName: 'DialogueMove' });
+      expect(service.getGameState(gameId).turn).toBe(0);
+
+      await service.moveToRegion(gameId, 'forest', 'dialogue', false);
+      expect(service.getGameState(gameId).turn).toBe(0);
+      expect(service.getGameState(gameId).world.currentRegion).toBe('forest');
+
+      // travel_log records trigger=dialogue
+      const logs = new TravelLogRepository(db).findByGameId(gameId);
+      expect(logs).toHaveLength(1);
+      expect(logs[0].trigger).toBe('dialogue');
     });
 
     it('should fail when target region is not connected', async () => {
@@ -329,41 +361,53 @@ describe('GameService', () => {
     });
   });
 
-  // TODO: save/load 测试需要文件 DB（:memory: 无法做 fs.copyFileSync）
-// 后续 RFC 创建 FileTestDb fixture 后启用
-describe.skip('save and load', () => {
+  describe('save and load (real file DB)', () => {
+    let saveService: GameService;
+    let saveManager: DbConnectionManager;
+    let saveAccessor: Database.Database;
+    let saveDb: Database.Database;
+    let realTmpRoot: string;
+    // The service hardcodes process.cwd()/data/saves + data/games for FS
+    // snapshot/narrative paths — keep those isolated and clean up after.
     const savesDir = path.join(process.cwd(), 'data', 'saves');
-    const dbFile = path.join(process.cwd(), 'data', 'talking-legend.db');
+    const gamesDir = path.join(process.cwd(), 'data', 'games');
 
     beforeEach(() => {
-      // Create a stub DB file so saveGame can copy it
-      fs.mkdirSync(path.dirname(dbFile), { recursive: true });
-      fs.writeFileSync(dbFile, '', 'utf-8');
+      realTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'game-service-file-'));
+      writeAethelgard(realTmpRoot);
+      // Remove any leftover prod data dirs from prior runs.
+      if (fs.existsSync(savesDir)) fs.rmSync(savesDir, { recursive: true, force: true });
+      if (fs.existsSync(gamesDir)) fs.rmSync(gamesDir, { recursive: true, force: true });
+      // Real file DB (not :memory:) so VACUUM INTO + reset(copyFileSync) work.
+      saveManager = new DbConnectionManager(path.join(realTmpRoot, 'main.db'));
+      saveDb = saveManager.db;
+      // Repos + GameService share a live-forwarding accessor so a load reset
+      // (which swaps the underlying connection) is transparent to them.
+      saveAccessor = boundDatabaseProxy(saveManager);
+      // Narrative dir must be data/games so saveGame/load align with the
+      // hardcoded process.cwd()/data path contract.
+      saveService = buildService(saveAccessor, saveManager, realTmpRoot, gamesDir);
     });
 
     afterEach(() => {
-      if (fs.existsSync(savesDir)) {
-        fs.rmSync(savesDir, { recursive: true, force: true });
-      }
-      if (fs.existsSync(dbFile)) {
-        fs.unlinkSync(dbFile);
-      }
+      saveManager.onModuleDestroy();
+      saveDb.close();
+      fs.rmSync(realTmpRoot, { recursive: true, force: true });
+      if (fs.existsSync(savesDir)) fs.rmSync(savesDir, { recursive: true, force: true });
+      if (fs.existsSync(gamesDir)) fs.rmSync(gamesDir, { recursive: true, force: true });
     });
 
-    it('should save game to slot and reload with same state', async () => {
-      const { gameId } = await service.createGame({ playerName: 'SaveHero' });
+    it('saveGame creates a VACUUM INTO snapshot with latest turn/region + narrative', async () => {
+      const { gameId } = await saveService.createGame({ playerName: 'SaveHero' });
 
-      // Advance one turn
-      await service.performAction(gameId, {
-        gameId,
-        action: 'look around',
-      });
+      // Advance: click move bumps to turn 1 + region forest
+      await saveService.moveToRegion(gameId, 'forest', 'click');
+      expect(saveService.getGameState(gameId).turn).toBe(1);
 
-      // Move to forest
-      await service.moveToRegion(gameId, 'forest', 'click');
+      // Append narrative via NarrativeService (as GM would)
+      narrativeService.append(gameId, 1, '旅程开始');
 
-      // Save to slot 1
-      const saveResult = await service.saveGame(gameId, 1);
+      const saveResult = await saveService.saveGame(gameId, 1);
       expect(saveResult.success).toBe(true);
       expect(saveResult.meta.slot).toBe(1);
       expect(saveResult.meta.playerName).toBe('SaveHero');
@@ -372,25 +416,78 @@ describe.skip('save and load', () => {
       expect(saveResult.meta.world).toBe('艾瑟尔加德');
       expect(saveResult.meta.savedAt).toBeDefined();
 
-      // Verify the save file was created
-      expect(fs.existsSync(path.join(savesDir, 'slot_1.db'))).toBe(true);
+      // Snapshot DB file exists and is openable + contains latest state
+      const snapshotPath = path.join(savesDir, 'slot_1.db');
+      expect(fs.existsSync(snapshotPath)).toBe(true);
+      const snapshotDb = new (require('better-sqlite3') as typeof import('better-sqlite3'))(
+        snapshotPath,
+        { readonly: true },
+      );
+      const gameRow = snapshotDb
+        .prepare('SELECT turn, phase FROM games WHERE id = ?')
+        .get(gameId) as { turn: number; phase: string };
+      expect(gameRow.turn).toBe(1);
+      const worldRow = snapshotDb
+        .prepare('SELECT current_region FROM worlds WHERE game_id = ?')
+        .get(gameId) as { current_region: string };
+      expect(worldRow.current_region).toBe('forest');
+      snapshotDb.close();
 
-      // Load the save
-      const loadResult = service.loadSave(1);
+      // narrative snapshot exists
+      expect(fs.existsSync(path.join(savesDir, 'slot_1.narrative.log'))).toBe(true);
+    });
+
+    it('rejects invalid slots', async () => {
+      await saveService.createGame({ playerName: 'Hero' });
+      await expect(saveService.saveGame('any', -1)).rejects.toThrow('0-99');
+      await expect(saveService.saveGame('any', 100)).rejects.toThrow('0-99');
+      await expect(saveService.saveGame('any', 1.5)).rejects.toThrow('0-99');
+    });
+
+    it('load resets the connection to the saved snapshot state', async () => {
+      const { gameId } = await saveService.createGame({ playerName: 'LoadHero' });
+      await saveService.moveToRegion(gameId, 'forest', 'click');
+      const saved = await saveService.saveGame(gameId, 1);
+
+      // Mutate the live DB away from the snapshot (click move → lake, turn 2)
+      await saveService.moveToRegion(gameId, 'lake', 'click');
+      expect(saveService.getGameState(gameId).turn).toBe(2);
+      expect(saveService.getGameState(gameId).world.currentRegion).toBe('lake');
+
+      // Load slot 1 → should return to saved turn 1 / region forest
+      const loadResult = saveService.loadSave(1);
       expect(loadResult.success).toBe(true);
-      expect(loadResult.meta.slot).toBe(1);
-      expect(loadResult.meta.turn).toBe(1);
-      expect(loadResult.meta.region).toBe('forest');
+      expect(loadResult.gameId).toBe(gameId);
+
+      // The live connection (same manager.db handle) now reads the snapshot
+      expect(saveService.getGameState(gameId).turn).toBe(1);
+      expect(saveService.getGameState(gameId).world.currentRegion).toBe('forest');
+      expect(saved.meta.gameId).toBe(gameId);
+    });
+
+    it('load restores narrative.log from the slot snapshot', async () => {
+      const { gameId } = await saveService.createGame({ playerName: 'NarrHero' });
+      narrativeService.append(gameId, 1, '第一轮叙事');
+      await saveService.saveGame(gameId, 1);
+
+      // Remove the live narrative (simulate drift), then load restores it
+      const liveNarr = path.join(gamesDir, gameId, 'narrative.log');
+      fs.rmSync(gamesDir, { recursive: true, force: true });
+      expect(fs.existsSync(liveNarr)).toBe(false);
+
+      saveService.loadSave(1);
+      expect(fs.existsSync(liveNarr)).toBe(true);
+      expect(fs.readFileSync(liveNarr, 'utf-8')).toContain('第一轮叙事');
     });
 
     it('should list all saves', async () => {
-      const { gameId } = await service.createGame({ playerName: 'ListHero' });
+      const { gameId } = await saveService.createGame({ playerName: 'ListHero' });
 
       // Save to 2 slots
-      await service.saveGame(gameId, 1);
-      await service.saveGame(gameId, 2);
+      await saveService.saveGame(gameId, 1);
+      await saveService.saveGame(gameId, 2);
 
-      const saves = service.listSaves();
+      const saves = saveService.listSaves();
       expect(saves).toHaveLength(2);
 
       const slot1 = saves.find((s) => s.slot === 1);
@@ -402,58 +499,26 @@ describe.skip('save and load', () => {
       expect(slot2!.playerName).toBe('ListHero');
     });
 
-    it('should delete save and free slot', async () => {
-      const { gameId } = await service.createGame({ playerName: 'DeleteHero' });
+    it('should delete save and free slot (removes files)', async () => {
+      const { gameId } = await saveService.createGame({ playerName: 'DeleteHero' });
 
-      await service.saveGame(gameId, 1);
-      await service.saveGame(gameId, 2);
+      await saveService.saveGame(gameId, 1);
+      await saveService.saveGame(gameId, 2);
 
       // Delete slot 1
-      await service.deleteSave(1);
+      await saveService.deleteSave(1);
 
       // Slot 1 should no longer exist
-      const saves = service.listSaves();
+      const saves = saveService.listSaves();
       expect(saves).toHaveLength(1);
       expect(saves[0].slot).toBe(2);
 
-      // Save file should be gone
+      // Save files should be gone
       expect(fs.existsSync(path.join(savesDir, 'slot_1.db'))).toBe(false);
+      expect(fs.existsSync(path.join(savesDir, 'slot_1.narrative.log'))).toBe(false);
 
       // Loading deleted slot should throw
-      expect(() => service.loadSave(1)).toThrow('Save slot 1 not found');
-    });
-  });
-
-  describe.skip('auto-save', () => {
-    const savesDir = path.join(process.cwd(), 'data', 'saves');
-    const dbFile = path.join(process.cwd(), 'data', 'talking-legend.db');
-
-    beforeEach(() => {
-      fs.mkdirSync(path.dirname(dbFile), { recursive: true });
-      fs.writeFileSync(dbFile, '', 'utf-8');
-    });
-
-    afterEach(() => {
-      if (fs.existsSync(savesDir)) {
-        fs.rmSync(savesDir, { recursive: true, force: true });
-      }
-      if (fs.existsSync(dbFile)) {
-        fs.unlinkSync(dbFile);
-      }
-    });
-
-    it('should auto-save to slot 0', async () => {
-      const { gameId } = await service.createGame({ playerName: 'AutoSaveHero' });
-
-      await service.autoSave(gameId);
-
-      const saveMeta = service.loadSave(0);
-      expect(saveMeta.success).toBe(true);
-      expect(saveMeta.meta.slot).toBe(0);
-      expect(saveMeta.meta.playerName).toBe('AutoSaveHero');
-
-      // Verify the file exists
-      expect(fs.existsSync(path.join(savesDir, 'slot_0.db'))).toBe(true);
+      expect(() => saveService.loadSave(1)).toThrow('Save slot 1 not found');
     });
   });
 });

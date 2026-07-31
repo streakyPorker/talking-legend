@@ -23,7 +23,8 @@ export function createMoveToTool(gameService: GameService): GameTool {
       }
 
       try {
-        const result = await gameService.moveToRegion(gameId, target, 'dialogue');
+        // bumpTurn=false：GM 流式 Phase1 已 bump 回合，此处不再额外推进回合
+        const result = await gameService.moveToRegion(gameId, target, 'dialogue', false);
         return {
           success: true,
           message: result.message,

@@ -8,15 +8,6 @@ import { talkToNpcSchema } from './npc.schema';
 export class NpcController {
   constructor(private readonly npcService: NpcService) {}
 
-  @Post(':npcId/talk')
-  async talk(
-    @Param('gameId') gameId: string,
-    @Param('npcId') npcId: string,
-    @Body(new ZodValidationPipe(talkToNpcSchema)) body: any,
-  ) {
-    return { success: true, data: { gameId, npcId, message: body.message, response: '[NPC dialogue coming in RFC-006]' } };
-  }
-
   @Post(':npcId/talk/stream')
   async talkStream(
     @Param('gameId') gameId: string,

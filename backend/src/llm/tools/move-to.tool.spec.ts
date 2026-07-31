@@ -4,7 +4,7 @@ import type { GameTool } from '../tool.interface';
 
 describe('createMoveToTool', () => {
   const mockGameService = {
-    moveToRegion: async (_gameId: string, target: string) => ({
+    moveToRegion: async (_gameId: string, target: string, _trigger: 'click' | 'dialogue', _bumpTurn: boolean) => ({
       success: true,
       message: `到达${target}`,
       narrative: `你来到了${target}。`,
@@ -61,13 +61,17 @@ describe('createMoveToTool', () => {
     expect(result.message).toContain('连接失败');
   });
 
-  it('should pass gameId and target to gameService', async () => {
+  it('should pass gameId, target, and trigger to gameService', async () => {
     let capturedGameId = '';
     let capturedTarget = '';
+    let capturedTrigger: 'click' | 'dialogue' | undefined;
+    let capturedBumpTurn: boolean | undefined;
     const capturingService = {
-      moveToRegion: async (gameId: string, target: string) => {
+      moveToRegion: async (gameId: string, target: string, trigger: 'click' | 'dialogue', bumpTurn: boolean) => {
         capturedGameId = gameId;
         capturedTarget = target;
+        capturedTrigger = trigger;
+        capturedBumpTurn = bumpTurn;
         return { success: true, message: 'ok', narrative: '', gameState: { turn: 1 } };
       },
     } as never;
@@ -75,5 +79,8 @@ describe('createMoveToTool', () => {
     await tool.execute('my-game', { target: 'lake' });
     expect(capturedGameId).toBe('my-game');
     expect(capturedTarget).toBe('lake');
+    expect(capturedTrigger).toBe('dialogue');
+    // GM 流式 Phase1 已 bump 回合，tool 内不再额外 bump
+    expect(capturedBumpTurn).toBe(false);
   });
 });

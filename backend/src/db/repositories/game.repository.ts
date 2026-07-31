@@ -10,34 +10,24 @@ import type { GameRow } from '../rows';
  * Public methods use Domain types (GameState). Private helpers handle
  * Row↔Domain mapping. Only games-table fields are populated — nested
  * objects (world, npcs, player) come from their respective repositories.
+ *
+ * Statements are prepared lazily at call time (never cached in the
+ * constructor) so they stay valid across a DbConnectionManager.reset()
+ * connection swap.
  */
 @Injectable()
 export class GameRepository {
-  private readonly findStmt: Database.Statement<[string]>;
-  private readonly insertStmt: Database.Statement<[string, string, number, string]>;
-  private readonly updateStmt: Database.Statement<[number, string, string]>;
-  private readonly deleteStmt: Database.Statement<[string]>;
-  private readonly listStmt: Database.Statement<[]>;
-
-  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
-    this.findStmt = db.prepare('SELECT * FROM games WHERE id = ?');
-    this.insertStmt = db.prepare(
-      'INSERT INTO games (id, player_name, turn, phase) VALUES (?, ?, ?, ?)',
-    );
-    this.updateStmt = db.prepare(
-      'UPDATE games SET turn = ?, phase = ?, updated_at = datetime(\'now\') WHERE id = ?',
-    );
-    this.deleteStmt = db.prepare('DELETE FROM games WHERE id = ?');
-    this.listStmt = db.prepare('SELECT * FROM games ORDER BY created_at DESC');
-  }
+  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {}
 
   findById(id: string): GameState | undefined {
-    const row = this.findStmt.get(id) as GameRow | undefined;
+    const row = this.db.prepare('SELECT * FROM games WHERE id = ?').get(id) as GameRow | undefined;
     return row ? rowToDomain(row) : undefined;
   }
 
   create(id: string, playerName: string): GameState {
-    this.insertStmt.run(id, playerName, 0, 'intro');
+    this.db
+      .prepare('INSERT INTO games (id, player_name, turn, phase) VALUES (?, ?, ?, ?)')
+      .run(id, playerName, 0, 'intro');
     return this.findById(id)!;
   }
 
@@ -60,11 +50,13 @@ export class GameRepository {
   }
 
   delete(id: string): void {
-    this.deleteStmt.run(id);
+    this.db.prepare('DELETE FROM games WHERE id = ?').run(id);
   }
 
   list(): GameState[] {
-    const rows = this.listStmt.all() as GameRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM games ORDER BY created_at DESC')
+      .all() as GameRow[];
     return rows.map(rowToDomain);
   }
 }

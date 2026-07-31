@@ -124,7 +124,7 @@ describe('GMEngine', () => {
     );
 
     const events: Array<{ type: string; content?: string }> = [];
-    for await (const event of engine.generate('game-1', 'look', undefined, 1)) {
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 1)) {
       events.push(event);
       if (event.type === 'chunk') {
         expect(event.content).toBeDefined();
@@ -159,7 +159,7 @@ describe('GMEngine', () => {
     );
 
     const events: Array<{ type: string; content?: string }> = [];
-    for await (const event of engine.generate('game-1', 'attack', 'goblin', 2)) {
+    for await (const event of engine.generateWithTools('game-1', 'attack', 'goblin', 2)) {
       events.push(event);
     }
 
@@ -175,7 +175,7 @@ describe('GMEngine', () => {
   // ─── Test 3: done 事件包含 turn ────────────────────────────
 
   it('done 事件包含正确的 turn', async () => {
-    for await (const event of engine.generate('game-1', 'look', undefined, 5)) {
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 5)) {
       if (event.type === 'done') {
         expect(event.turn).toBe(5);
       }
@@ -185,11 +185,36 @@ describe('GMEngine', () => {
   // ─── Test 4: done 事件包含 tokenEstimate ───────────────────
 
   it('done 事件包含上下文 token 估算', async () => {
-    for await (const event of engine.generate('game-1', 'look', undefined, 3)) {
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 3)) {
       if (event.type === 'done') {
         expect(event.tokenEstimate).toBe(1200);
       }
     }
+  });
+
+  // ─── Test 4b: done 事件包含完整 narrative 文本 ──────────────
+
+  it('done 事件包含 narrative 完整文本', async () => {
+    const text = '你环顾四周，古老的枫树在微风中沙沙作响。';
+    mockLlmClient = makeMockLlmClient(makeStreamChunks(text));
+    engine = new GMEngine(
+      mockLlmClient,
+      mockTemplateEngine,
+      mockContextProvider,
+      mockLlmLogRepo,
+      mockNarrativeService,
+      mockToolRegistry,
+    );
+
+    let doneEvent: GMDoneEvent | undefined;
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 3)) {
+      if (event.type === 'done') {
+        doneEvent = event;
+      }
+    }
+
+    expect(doneEvent).toBeDefined();
+    expect(doneEvent!.narrative).toBe(text);
   });
 
   // ─── Test 5: llmLogRepo.insert 被调用 ──────────────────────
@@ -207,7 +232,7 @@ describe('GMEngine', () => {
     );
 
     const events: Array<{ type: string }> = [];
-    for await (const event of engine.generate('game-1', 'listen', undefined, 2)) {
+    for await (const event of engine.generateWithTools('game-1', 'listen', undefined, 2)) {
       events.push(event);
     }
 
@@ -238,7 +263,7 @@ describe('GMEngine', () => {
     );
 
     const events: Array<{ type: string }> = [];
-    for await (const event of engine.generate('game-1', 'open door', undefined, 3)) {
+    for await (const event of engine.generateWithTools('game-1', 'open door', undefined, 3)) {
       events.push(event);
     }
 
@@ -261,7 +286,7 @@ describe('GMEngine', () => {
     );
 
     const chunks: string[] = [];
-    for await (const event of engine.generate('game-1', 'meditate', undefined, 1)) {
+    for await (const event of engine.generateWithTools('game-1', 'meditate', undefined, 1)) {
       if (event.type === 'chunk') {
         chunks.push(event.content);
       }
@@ -275,7 +300,7 @@ describe('GMEngine', () => {
   // ─── Test 8: target undefined 时 userParams.target = '无' ───
 
   it('target 为 undefined 时模板渲染用 "无" 填充', async () => {
-    for await (const event of engine.generate('game-1', 'look', undefined, 1)) {
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 1)) {
       if (event.type === 'done') break;
     }
 
@@ -287,7 +312,7 @@ describe('GMEngine', () => {
   // ─── Test 9: target 有值时原样传递 ──────────────────────────
 
   it('target 有值时原样传给模板引擎', async () => {
-    for await (const event of engine.generate('game-1', 'talk', '老铁匠王二', 1)) {
+    for await (const event of engine.generateWithTools('game-1', 'talk', '老铁匠王二', 1)) {
       if (event.type === 'done') break;
     }
 
@@ -313,7 +338,7 @@ describe('GMEngine', () => {
     );
 
     const events: Array<{ type: string; content?: string }> = [];
-    for await (const event of engine.generate('game-1', 'look', undefined, 1)) {
+    for await (const event of engine.generateWithTools('game-1', 'look', undefined, 1)) {
       events.push(event);
     }
 

@@ -13,7 +13,6 @@ import type { NpcRepository } from '../db/repositories/npc.repository';
 import type { ContextProvider } from '../game/context-provider';
 import type { NpcChunkEvent, NpcDoneEvent } from './npc-engine';
 import type { NPCState } from '@talking-legend/shared';
-import type { ToolRegistry } from './tool-registry';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -90,14 +89,6 @@ function makeMockNpcRepo(): NpcRepository {
   } as unknown as NpcRepository;
 }
 
-function makeMockToolRegistry(): ToolRegistry {
-  return {
-    getToolsForLLM: vi.fn().mockReturnValue([]),
-    execute: vi.fn(),
-    register: vi.fn(),
-  } as unknown as ToolRegistry;
-}
-
 function makeSampleNpc(overrides?: Partial<NPCState>): NPCState {
   return {
     id: 'npc-1',
@@ -120,7 +111,6 @@ describe('NpcEngine', () => {
   let mockContextProvider: ContextProvider;
   let mockLlmLogRepo: LlmLogRepository;
   let mockNpcRepo: NpcRepository;
-  let mockToolRegistry: ToolRegistry;
   let sampleNpc: NPCState;
 
   beforeEach(() => {
@@ -128,7 +118,6 @@ describe('NpcEngine', () => {
     mockContextProvider = makeMockContextProvider();
     mockLlmLogRepo = makeMockLlmLogRepo();
     mockNpcRepo = makeMockNpcRepo();
-    mockToolRegistry = makeMockToolRegistry();
     sampleNpc = makeSampleNpc();
 
     engine = new NpcEngine(
@@ -136,7 +125,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
   });
 
@@ -150,7 +138,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];
@@ -188,7 +175,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];
@@ -218,7 +204,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     for await (const _event of engine.generate(
@@ -246,7 +231,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     for await (const _event of engine.generate(
@@ -274,7 +258,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     const history: Array<{ role: 'user' | 'assistant'; content: string }> = [
@@ -331,7 +314,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     for await (const _event of engine.generate(
@@ -423,7 +405,6 @@ describe('NpcEngine', () => {
       mockContextProvider,
       mockLlmLogRepo,
       mockNpcRepo,
-      mockToolRegistry,
     );
 
     const events: Array<{ type: string; content?: string }> = [];

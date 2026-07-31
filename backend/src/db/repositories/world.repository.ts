@@ -9,42 +9,41 @@ import type { WorldRow } from '../rows';
  *
  * JSON columns (regions, global_events) are serialized/deserialized
  * in private helpers. Public methods work with WorldState domain types.
+ *
+ * Statements are prepared lazily at call time so they survive a
+ * DbConnectionManager.reset() connection swap.
  */
 @Injectable()
 export class WorldRepository {
-  private readonly findStmt: Database.Statement<[string]>;
-  private readonly upsertStmt: Database.Statement;
-  private readonly deleteStmt: Database.Statement<[string]>;
-
-  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
-    this.findStmt = db.prepare('SELECT * FROM worlds WHERE game_id = ?');
-    this.upsertStmt = db.prepare(`
-      INSERT INTO worlds (game_id, name, description, current_region, time_of_day, weather, regions, global_events)
-      VALUES (@game_id, @name, @description, @current_region, @time_of_day, @weather, @regions, @global_events)
-      ON CONFLICT(game_id) DO UPDATE SET
-        name            = excluded.name,
-        description     = excluded.description,
-        current_region  = excluded.current_region,
-        time_of_day     = excluded.time_of_day,
-        weather         = excluded.weather,
-        regions         = excluded.regions,
-        global_events   = excluded.global_events,
-        updated_at      = datetime('now')
-    `);
-    this.deleteStmt = db.prepare('DELETE FROM worlds WHERE game_id = ?');
-  }
+  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {}
 
   findByGameId(gameId: string): WorldState | undefined {
-    const row = this.findStmt.get(gameId) as WorldRow | undefined;
+    const row = this.db
+      .prepare('SELECT * FROM worlds WHERE game_id = ?')
+      .get(gameId) as WorldRow | undefined;
     return row ? deserializeWorld(row) : undefined;
   }
 
   upsert(gameId: string, world: WorldState): void {
-    this.upsertStmt.run(serializeWorld(gameId, world));
+    this.db
+      .prepare(`
+        INSERT INTO worlds (game_id, name, description, current_region, time_of_day, weather, regions, global_events)
+        VALUES (@game_id, @name, @description, @current_region, @time_of_day, @weather, @regions, @global_events)
+        ON CONFLICT(game_id) DO UPDATE SET
+          name            = excluded.name,
+          description     = excluded.description,
+          current_region  = excluded.current_region,
+          time_of_day     = excluded.time_of_day,
+          weather         = excluded.weather,
+          regions         = excluded.regions,
+          global_events   = excluded.global_events,
+          updated_at      = datetime('now')
+      `)
+      .run(serializeWorld(gameId, world));
   }
 
   delete(gameId: string): void {
-    this.deleteStmt.run(gameId);
+    this.db.prepare('DELETE FROM worlds WHERE game_id = ?').run(gameId);
   }
 }
 

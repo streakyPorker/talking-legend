@@ -9,15 +9,11 @@ import {
   HttpCode,
   HttpStatus,
   HttpException,
-  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import * as fs from 'fs';
-import * as path from 'path';
 import type {
   APIResponse,
   CreateGameResponse,
-  GameActionResponse,
 } from '@talking-legend/shared';
 import { GameService } from './game.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -43,15 +39,6 @@ export class GameController {
     @Body(new ZodValidationPipe(CreateGameRequestSchema)) body: CreateGameRequestValidated,
   ): Promise<APIResponse<CreateGameResponse>> {
     const result = await this.gameService.createGame(body);
-    return { success: true, data: result };
-  }
-
-  @Post(':id/action')
-  async performAction(
-    @Param('id') id: string,
-    @Body(new ZodValidationPipe(GameActionRequestSchema)) body: GameActionRequestValidated,
-  ): Promise<APIResponse<GameActionResponse>> {
-    const result = await this.gameService.performAction(id, { gameId: id, ...body });
     return { success: true, data: result };
   }
 
@@ -102,15 +89,9 @@ export class GameController {
 
   @Post('saves/:slot/load')
   async load(@Param('slot') slot: string) {
-    const saveSlot = parseInt(slot, 10);
-    // Get gameId from metadata BEFORE copying file (metadata in current DB)
-    const data = this.gameService.loadSave(saveSlot);
-    // Copy save file over main DB
-    const savePath = path.join(process.cwd(), 'data', 'saves', `slot_${saveSlot}.db`);
-    const dbPath = path.join(process.cwd(), 'data', 'talking-legend.db');
-    if (!fs.existsSync(savePath)) throw new NotFoundException('Save not found');
-    fs.copyFileSync(savePath, dbPath);
-    return { success: true, data: { gameId: data.meta.gameId, message: '存档已加载' } };
+    const result = this.gameService.loadSave(parseInt(slot, 10));
+    // Frontend jumps to the loaded game's URL using the returned gameId.
+    return { success: true, data: { gameId: result.gameId, message: '存档已加载' } };
   }
 
   @Delete('saves/:slot')

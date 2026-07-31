@@ -19,39 +19,38 @@ export interface StorylineState {
  *
  * JSON columns (stage_data, completed_stages, active_events) are
  * serialized/deserialized in private helpers.
+ *
+ * Statements are prepared lazily at call time so they survive a
+ * DbConnectionManager.reset() connection swap.
  */
 @Injectable()
 export class StorylineRepository {
-  private readonly findStmt: Database.Statement<[string]>;
-  private readonly upsertStmt: Database.Statement;
-  private readonly deleteStmt: Database.Statement<[string]>;
-
-  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
-    this.findStmt = db.prepare('SELECT * FROM storylines WHERE game_id = ?');
-    this.upsertStmt = db.prepare(`
-      INSERT INTO storylines (game_id, current_stage, stage_data, completed_stages, active_events)
-      VALUES (@game_id, @current_stage, @stage_data, @completed_stages, @active_events)
-      ON CONFLICT(game_id) DO UPDATE SET
-        current_stage    = excluded.current_stage,
-        stage_data       = excluded.stage_data,
-        completed_stages = excluded.completed_stages,
-        active_events    = excluded.active_events,
-        updated_at       = datetime('now')
-    `);
-    this.deleteStmt = db.prepare('DELETE FROM storylines WHERE game_id = ?');
-  }
+  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {}
 
   findByGameId(gameId: string): StorylineState | undefined {
-    const row = this.findStmt.get(gameId) as StorylineRow | undefined;
+    const row = this.db
+      .prepare('SELECT * FROM storylines WHERE game_id = ?')
+      .get(gameId) as StorylineRow | undefined;
     return row ? deserializeStoryline(row) : undefined;
   }
 
   upsert(gameId: string, state: StorylineState): void {
-    this.upsertStmt.run(serializeStoryline(gameId, state));
+    this.db
+      .prepare(`
+        INSERT INTO storylines (game_id, current_stage, stage_data, completed_stages, active_events)
+        VALUES (@game_id, @current_stage, @stage_data, @completed_stages, @active_events)
+        ON CONFLICT(game_id) DO UPDATE SET
+          current_stage    = excluded.current_stage,
+          stage_data       = excluded.stage_data,
+          completed_stages = excluded.completed_stages,
+          active_events    = excluded.active_events,
+          updated_at       = datetime('now')
+      `)
+      .run(serializeStoryline(gameId, state));
   }
 
   delete(gameId: string): void {
-    this.deleteStmt.run(gameId);
+    this.db.prepare('DELETE FROM storylines WHERE game_id = ?').run(gameId);
   }
 }
 

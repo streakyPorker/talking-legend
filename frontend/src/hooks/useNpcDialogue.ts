@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { talkToNpcStream, submitNpcSummary } from '../services/api.js';
 
 export interface NpcMessage {
@@ -11,7 +11,6 @@ export function useNpcDialogue(playerName: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
     async (npcId: string, gameId: string, text: string): Promise<NpcMessage[]> => {
@@ -78,11 +77,7 @@ export function useNpcDialogue(playerName: string) {
           }
         }
       } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          // User cancelled — do nothing
-        } else {
-          setError(err instanceof Error ? err.message : '对话失败');
-        }
+        setError(err instanceof Error ? err.message : '对话失败');
       } finally {
         setIsLoading(false);
         setIsStreaming(false);
@@ -100,11 +95,5 @@ export function useNpcDialogue(playerName: string) {
     setIsStreaming(false);
   }, []);
 
-  const abort = useCallback(() => {
-    abortRef.current?.abort();
-    setIsStreaming(false);
-    setIsLoading(false);
-  }, []);
-
-  return { messages, isLoading, isStreaming, error, sendMessage, reset, abort };
+  return { messages, isLoading, isStreaming, error, sendMessage, reset };
 }

@@ -15,10 +15,11 @@ if (process.argv.includes('--clean')) {
   try { rmSync(join(ROOT, 'backend', 'data', 'talking-legend.db'), { force: true }); } catch {}
 }
 
-const proc = spawn('node', ['dist/main.js'], {
+// 用 process.execPath 直接 spawn node，避免 shell:true 使 proc.pid 指向 cmd shell
+// 而非真实 node 进程（否则写进 legend.pid 的 PID 杀不到监听端口的进程）。
+const proc = spawn(process.execPath, ['dist/main.js'], {
   cwd: join(ROOT, 'backend'),
   stdio: 'inherit',
-  shell: true,
 });
 
 writeFileSync(PID_FILE, String(proc.pid));

@@ -1,6 +1,7 @@
 import { Global, Module, DynamicModule } from '@nestjs/common';
 import Database from 'better-sqlite3';
 import { migrate } from './migrate';
+import { DbConnectionManager, boundDatabaseProxy } from './db-connection-manager';
 import { GameRepository } from './repositories/game.repository';
 import { WorldRepository } from './repositories/world.repository';
 import { NpcRepository } from './repositories/npc.repository';
@@ -15,7 +16,7 @@ export interface DbModuleConfig {
   dbPath: string;
 }
 
-import { DB_INSTANCE } from './tokens';
+import { DB_INSTANCE, DATABASE_MANAGER } from './tokens';
 
 const REPOSITORIES = [
   GameRepository,
@@ -33,25 +34,22 @@ const REPOSITORIES = [
 @Module({})
 export class DbModule {
   static forRoot(config: DbModuleConfig): DynamicModule {
-    const db = new Database(config.dbPath);
+    const manager = new DbConnectionManager(config.dbPath);
 
-    // WAL mode for read concurrency; synchronous=NORMAL is safe under WAL
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = NORMAL');
-    db.pragma('foreign_keys = ON');
-
-    // Run pending schema migrations
-    migrate(db);
+    const managerProvider = {
+      provide: DATABASE_MANAGER,
+      useValue: manager,
+    };
 
     const dbProvider = {
       provide: DB_INSTANCE,
-      useValue: db,
+      useValue: boundDatabaseProxy(manager),
     };
 
     return {
       module: DbModule,
-      providers: [dbProvider, ...REPOSITORIES],
-      exports: [dbProvider, ...REPOSITORIES],
+      providers: [dbProvider, managerProvider, ...REPOSITORIES],
+      exports: [dbProvider, managerProvider, ...REPOSITORIES],
     };
   }
 }

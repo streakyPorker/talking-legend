@@ -40,16 +40,17 @@ describe('WorldService', () => {
   });
 
   describe('moveToRegion', () => {
-    it('should move to a connected region', async () => {
+    it('should validate connectivity and return from/target for a connected region', async () => {
       const result = await service.moveToRegion('game-1', 'forest');
 
       expect(result.fromRegion).toBe('village');
+      expect(result.targetName).toBe('Dark Wood');
       expect(result.narrative).toContain('Stoneshire');
       expect(result.narrative).toContain('Dark Wood');
 
-      // Verify persistence
-      const updated = worldRepo.findByGameId('game-1');
-      expect(updated!.currentRegion).toBe('forest');
+      // Read-only: must NOT mutate world state
+      const unchanged = worldRepo.findByGameId('game-1');
+      expect(unchanged!.currentRegion).toBe('village');
     });
 
     it('should throw when target region is not connected', async () => {
@@ -66,27 +67,25 @@ describe('WorldService', () => {
       await expect(service.moveToRegion('non-existent', 'forest')).rejects.toThrow('游戏不存在');
     });
 
-    it('should move back and forth between connected regions', async () => {
-      // Move to forest
-      await service.moveToRegion('game-1', 'forest');
-      let updated = worldRepo.findByGameId('game-1');
-      expect(updated!.currentRegion).toBe('forest');
+    it('should not persist moves — world state stays unchanged', async () => {
+      // Move to forest (read-only — no DB write)
+      const toForest = await service.moveToRegion('game-1', 'forest');
+      expect(toForest.fromRegion).toBe('village');
+      expect(toForest.targetName).toBe('Dark Wood');
 
-      // Move back to village (connected from forest)
-      const result = await service.moveToRegion('game-1', 'village');
-      expect(result.fromRegion).toBe('forest');
-      expect(result.narrative).toContain('Stoneshire');
-
-      updated = worldRepo.findByGameId('game-1');
-      expect(updated!.currentRegion).toBe('village');
+      // World state must remain untouched — currentRegion keeps its original value
+      const world = worldRepo.findByGameId('game-1');
+      expect(world!.currentRegion).toBe('village');
     });
 
     it('should return correct return type structure', async () => {
       const result = await service.moveToRegion('game-1', 'forest');
 
       expect(result).toHaveProperty('fromRegion');
+      expect(result).toHaveProperty('targetName');
       expect(result).toHaveProperty('narrative');
       expect(typeof result.fromRegion).toBe('string');
+      expect(typeof result.targetName).toBe('string');
       expect(typeof result.narrative).toBe('string');
     });
   });

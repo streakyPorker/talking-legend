@@ -30,78 +30,65 @@ export interface CostBreakdown {
 /**
  * Repository for the `llm_logs` table.
  *
- * In addition to standard CRUD, provides aggregate queries for cost
- * tracking and usage analytics.
+ * Statements are prepared lazily at call time so they survive a
+ * DbConnectionManager.reset() connection swap.
  */
 @Injectable()
 export class LlmLogRepository {
-  private readonly insertStmt: Database.Statement;
-  private readonly findByGameStmt: Database.Statement<[string]>;
-  private readonly findByIdStmt: Database.Statement<[number]>;
-  private readonly costByGameStmt: Database.Statement<[string]>;
-  private readonly costByGameAndTypeStmt: Database.Statement;
-  private readonly recentByGameStmt: Database.Statement;
-  private readonly totalCostStmt: Database.Statement<[string]>;
-
-  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {
-    this.insertStmt = db.prepare(`
-      INSERT INTO llm_logs (game_id, call_type, model, prompt_tokens, completion_tokens, latency_ms, cost_usd)
-      VALUES (@game_id, @call_type, @model, @prompt_tokens, @completion_tokens, @latency_ms, @cost_usd)
-    `);
-    this.findByGameStmt = db.prepare(
-      'SELECT * FROM llm_logs WHERE game_id = ? ORDER BY created_at ASC',
-    );
-    this.findByIdStmt = db.prepare('SELECT * FROM llm_logs WHERE id = ?');
-    this.costByGameStmt = db.prepare(`
-      SELECT SUM(cost_usd) AS total_cost, SUM(prompt_tokens + completion_tokens) AS total_tokens
-      FROM llm_logs WHERE game_id = ?
-    `);
-    this.costByGameAndTypeStmt = db.prepare(`
-      SELECT call_type, SUM(cost_usd) AS total_cost_usd, COUNT(*) AS total_calls
-      FROM llm_logs
-      WHERE game_id = ?
-      GROUP BY call_type
-    `);
-    this.recentByGameStmt = db.prepare(
-      'SELECT * FROM llm_logs WHERE game_id = ? ORDER BY id DESC LIMIT ?',
-    );
-    this.totalCostStmt = db.prepare('SELECT SUM(cost_usd) AS total FROM llm_logs WHERE game_id = ?');
-  }
+  constructor(@Inject(DB_INSTANCE) private readonly db: Database.Database) {}
 
   insert(entry: Omit<LlmLogEntry, 'id' | 'createdAt'>): number {
-    const result = this.insertStmt.run({
-      game_id: entry.gameId,
-      call_type: entry.callType,
-      model: entry.model,
-      prompt_tokens: entry.promptTokens,
-      completion_tokens: entry.completionTokens,
-      latency_ms: entry.latencyMs,
-      cost_usd: entry.costUsd,
-    });
+    const result = this.db
+      .prepare(`
+        INSERT INTO llm_logs (game_id, call_type, model, prompt_tokens, completion_tokens, latency_ms, cost_usd)
+        VALUES (@game_id, @call_type, @model, @prompt_tokens, @completion_tokens, @latency_ms, @cost_usd)
+      `)
+      .run({
+        game_id: entry.gameId,
+        call_type: entry.callType,
+        model: entry.model,
+        prompt_tokens: entry.promptTokens,
+        completion_tokens: entry.completionTokens,
+        latency_ms: entry.latencyMs,
+        cost_usd: entry.costUsd,
+      });
     return Number(result.lastInsertRowid);
   }
 
   findByGameId(gameId: string): LlmLogEntry[] {
-    const rows = this.findByGameStmt.all(gameId) as LlmLogRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM llm_logs WHERE game_id = ? ORDER BY created_at ASC')
+      .all(gameId) as LlmLogRow[];
     return rows.map(rowToEntry);
   }
 
   findById(id: number): LlmLogEntry | undefined {
-    const row = this.findByIdStmt.get(id) as LlmLogRow | undefined;
+    const row = this.db
+      .prepare('SELECT * FROM llm_logs WHERE id = ?')
+      .get(id) as LlmLogRow | undefined;
     return row ? rowToEntry(row) : undefined;
   }
 
   getTotalCost(gameId: string): number {
-    const row = this.totalCostStmt.get(gameId) as { total: number | null } | undefined;
+    const row = this.db
+      .prepare('SELECT SUM(cost_usd) AS total FROM llm_logs WHERE game_id = ?')
+      .get(gameId) as { total: number | null } | undefined;
     return row?.total ?? 0;
   }
 
   getCostBreakdown(gameId: string): CostBreakdown[] {
-    const rows = this.costByGameAndTypeStmt.all(gameId) as Array<{
-      call_type: string;
-      total_cost_usd: number;
-      total_calls: number;
-    }>;
+    const rows = this.db
+      .prepare(`
+        SELECT call_type, SUM(cost_usd) AS total_cost_usd, COUNT(*) AS total_calls
+        FROM llm_logs
+        WHERE game_id = ?
+        GROUP BY call_type
+      `)
+      .all(gameId) as Array<{
+        call_type: string;
+        total_cost_usd: number;
+        total_calls: number;
+      }>;
     return rows.map((r) => ({
       callType: r.call_type,
       totalCostUsd: r.total_cost_usd,
@@ -110,7 +97,9 @@ export class LlmLogRepository {
   }
 
   getRecentByGameId(gameId: string, limit = 20): LlmLogEntry[] {
-    const rows = this.recentByGameStmt.all(gameId, limit) as LlmLogRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM llm_logs WHERE game_id = ? ORDER BY id DESC LIMIT ?')
+      .all(gameId, limit) as LlmLogRow[];
     return rows.map(rowToEntry);
   }
 }

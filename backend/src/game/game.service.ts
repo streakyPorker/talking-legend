@@ -6,17 +6,14 @@ import * as path from 'path';
 import type {
   CreateGameRequest,
   CreateGameResponse,
-  GameActionRequest,
-  GameActionResponse,
   GameState,
-  NPCDialogueResponse,
-  WorldEvolutionResponse,
   NPCState,
   PlayerState,
   WorldState,
   MoveResult,
 } from '@talking-legend/shared';
-import { DB_INSTANCE } from '../db/tokens';
+import { DB_INSTANCE, DATABASE_MANAGER } from '../db/tokens';
+import { DbConnectionManager } from '../db/db-connection-manager';
 import { GameRepository } from '../db/repositories/game.repository';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { NpcRepository } from '../db/repositories/npc.repository';
@@ -68,6 +65,7 @@ export class GameService {
 
   constructor(
     @Inject(DB_INSTANCE) private readonly db: Database.Database,
+    @Inject(DATABASE_MANAGER) private readonly dbManager: DbConnectionManager,
     @Inject(GameRepository) private readonly gameRepo: GameRepository,
     @Inject(WorldRepository) private readonly worldRepo: WorldRepository,
     @Inject(NpcRepository) private readonly npcRepo: NpcRepository,
@@ -159,70 +157,53 @@ export class GameService {
     return { gameId, initialState: gameState };
   }
 
-  async performAction(
+  /**
+   * 移动玩家到相邻区域（点击移动或 GM 流内 tool 调用）。
+   *
+   * 移动语义 = 「行动即 1 回合」：
+   *  - 点击路由（trigger='click'，bumpTurn=true）→ 移动消耗 1 回合。
+   *  - GM 流式行动 Phase1 已先 bump turn，流内 moveTo tool 以
+   *    trigger='dialogue', bumpTurn=false 调用，不再额外 bump。
+   *
+   * WorldService.moveToRegion 仅做连通性校验 + 生成叙事（不写库）；
+   * 本方法在**单个事务**内完成：world.upsert + (可选)turn bump +
+   * player.location 更新 + travel_log 插入。
+   */
+  async moveToRegion(
     gameId: string,
-    req: GameActionRequest,
-  ): Promise<GameActionResponse> {
-    this.logger.debug(`performAction (non-stream): gameId=${gameId} action=${req.action} target=${req.target ?? '(none)'}`);
+    targetRegion: string,
+    trigger: 'click' | 'dialogue' = 'click',
+    bumpTurn = true,
+  ): Promise<MoveResult> {
+    this.logger.log(`Move ${trigger}${bumpTurn ? '' : '(no-bump)'}: ${gameId} → ${targetRegion}`);
 
-    // Atomic read-modify-write via db.transaction()
-    const doAction = this.db.transaction((): { narrative: string; npcResponses: NPCDialogueResponse[]; worldChanges: WorldEvolutionResponse } => {
+    // WorldService only validates connectivity and crafts the narrative — no write.
+    const result = await this.worldService.moveToRegion(gameId, targetRegion);
+
+    // 单事务：world upsert + optional turn bump + player.location + travel_log
+    this.db.transaction(() => {
       const game = this.gameRepo.findById(gameId);
       if (!game) {
         throw new NotFoundException(`Game not found: ${gameId}`);
       }
 
-      // TODO: LLM integration — placeholder narrative
-      const narrative = `You ${req.action}${req.target ? ` at ${req.target}` : ''}. The world shifts subtly in response.`;
-      const npcResponses: NPCDialogueResponse[] = [];
-      const worldChanges: WorldEvolutionResponse = {
-        narrative,
-        stateChanges: [],
-        newEvents: [],
-      };
+      const newTurn = game.turn + (bumpTurn ? 1 : 0);
 
-      const expectedTurn = game.turn;
-      const updatedTurn = game.turn + 1;
-
-      // Optimistic concurrency: only update if turn matches expected value
-      const updated = this.gameRepo.updateTurn(gameId, updatedTurn, expectedTurn);
-      if (!updated) {
-        throw new NotFoundException(`Game ${gameId} was modified by another request — retry`);
+      if (bumpTurn) {
+        const updated = this.gameRepo.updateTurn(gameId, newTurn, game.turn);
+        if (!updated) {
+          throw new ConflictException(`Game ${gameId} was modified by another request — retry`);
+        }
       }
 
-      return { narrative, npcResponses, worldChanges };
-    });
+      // Upsert world state with the new currentRegion (self-contained, not via
+      // WorldService write path).
+      const world = this.worldRepo.findByGameId(gameId);
+      if (!world) {
+        throw new Error('Game state incomplete');
+      }
+      this.worldRepo.upsert(gameId, { ...world, currentRegion: targetRegion });
 
-    const { narrative, npcResponses, worldChanges } = doAction();
-
-    // Re-read the full state after the transaction
-    const storedGame = this.gameRepo.findById(gameId);
-    const world = this.worldRepo.findByGameId(gameId)!;
-    const npcs = this.npcRepo.findByGameId(gameId);
-    const player = this.playerRepo.findByGameId(gameId)!;
-
-    const updatedState: GameState = {
-      id: gameId,
-      world,
-      npcs,
-      player,
-      turn: storedGame!.turn,
-      phase: storedGame!.phase,
-    };
-
-    return { narrative, npcResponses, worldChanges, updatedState };
-  }
-
-  async moveToRegion(gameId: string, targetRegion: string, trigger: 'click' | 'dialogue' = 'click'): Promise<MoveResult> {
-    this.logger.log(`Move ${trigger}: ${gameId} → ${targetRegion}`);
-    // Delegate to WorldService for data operation
-    const result = await this.worldService.moveToRegion(gameId, targetRegion);
-
-    // Bump turn + update player location (原子操作)
-    this.db.transaction(() => {
-      const game = this.gameRepo.findById(gameId);
-      const newTurn = (game?.turn ?? 0) + 1;
-      this.gameRepo.updateTurn(gameId, newTurn, game?.turn ?? 0);
       this.playerRepo.updateLocation(gameId, targetRegion);
 
       // Record travel
@@ -236,7 +217,7 @@ export class GameService {
     })();
 
     // Re-read full game state
-    const gameState = await this.getGameState(gameId);
+    const gameState = this.getGameState(gameId);
 
     return {
       success: true,
@@ -316,18 +297,31 @@ export class GameService {
 
   // ── Save / Load ───────────────────────────────────────────────
 
+  private savesDir(): string {
+    return path.join(process.cwd(), 'data', 'saves');
+  }
+
+  /** 校验 slot 为 0-99 整数，避免路径拼接注入。 */
+  private assertValidSlot(slot: number): void {
+    if (!Number.isInteger(slot) || slot < 0 || slot > 99) {
+      throw new BadRequestException(`Invalid save slot: ${slot} (must be integer 0-99)`);
+    }
+  }
+
   /**
    * Save game state to a numbered slot.
-   * Copies DB file and narrative log to data/saves/slot_N.*
+   *
+   * 使用 `VACUUM INTO` 生成一致快照（自动合并 -wal）到 data/saves/slot_N.db，
+   * narrative.log 一并快照到 slot_N.narrative.log。
    */
   async saveGame(gameId: string, slot: number): Promise<{ success: boolean; meta: SaveRecord }> {
+    this.assertValidSlot(slot);
     const game = this.gameRepo.findById(gameId);
     if (!game) throw new NotFoundException(`Game not found: ${gameId}`);
 
     const world = this.worldRepo.findByGameId(gameId);
-    const player = this.playerRepo.findByGameId(gameId);
 
-    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    const savesDir = this.savesDir();
     fs.mkdirSync(savesDir, { recursive: true });
 
     // Save metadata to DB
@@ -339,16 +333,21 @@ export class GameService {
       gameId,
     });
 
-    // Copy DB file
-    const dbSrc = path.join(process.cwd(), 'data', 'talking-legend.db');
-    const dbDst = path.join(savesDir, `slot_${slot}.db`);
-    fs.copyFileSync(dbSrc, dbDst);
+    // VACUUM INTO a consistent snapshot (merges -wal so no data is lost).
+    const savedDb = path.join(savesDir, `slot_${slot}.db`);
+    if (fs.existsSync(savedDb)) fs.unlinkSync(savedDb);
+    // Escape single quotes for SQL string literal (path may contain them).
+    const escaped = savedDb.replace(/'/g, "''");
+    this.db.exec(`VACUUM INTO '${escaped}'`);
 
     // Copy narrative log if it exists
     const narrativeSrc = path.join(process.cwd(), 'data', 'games', gameId, 'narrative.log');
     const narrativeDst = path.join(savesDir, `slot_${slot}.narrative.log`);
     if (fs.existsSync(narrativeSrc)) {
       fs.copyFileSync(narrativeSrc, narrativeDst);
+    } else if (fs.existsSync(narrativeDst)) {
+      // Stale narrative snapshot — remove so a later load doesn't restore an old log.
+      fs.unlinkSync(narrativeDst);
     }
 
     const meta = this.saveRepo.findBySlot(slot)!;
@@ -364,28 +363,53 @@ export class GameService {
   }
 
   /**
-   * Verify that a save file exists and return its meta.
-   * The actual DB swap (copy save file over main DB) happens in the controller.
+   * Load a save slot — swaps the live connection to the snapshot.
+   *
+   * Order is critical: metadata (gameId etc.) is read from the current DB's
+   * `saves` table BEFORE the reset overwrites it. Then `dbManager.reset()`
+   * closes the old connection, restores the snapshot over the main DB,
+   * clears stale -wal/-shm, reopens + re-migrates. narrative.log is restored
+   * from the slot snapshot.
    */
-  loadSave(slot: number): { success: boolean; meta: SaveRecord } {
+  loadSave(slot: number): { success: boolean; gameId: string; meta: SaveRecord } {
+    this.assertValidSlot(slot);
+    // 1. Read metadata FROM the current DB — must happen before the swap.
     const meta = this.saveRepo.findBySlot(slot);
     if (!meta) throw new NotFoundException(`Save slot ${slot} not found`);
 
-    const savePath = path.join(process.cwd(), 'data', 'saves', `slot_${slot}.db`);
+    const savePath = path.join(this.savesDir(), `slot_${slot}.db`);
     if (!fs.existsSync(savePath)) {
       throw new NotFoundException(`Save file not found for slot ${slot}`);
     }
 
-    return { success: true, meta };
+    // 2. Swap the live connection to the snapshot DB.
+    this.dbManager.reset(savePath);
+
+    // 3. Restore narrative.log from the slot snapshot (if present).
+    this.restoreNarrative(slot, meta.gameId);
+
+    this.logger.log(`Game loaded: slot=${slot} gameId=${meta.gameId} turn=${meta.turn}`);
+    return { success: true, gameId: meta.gameId, meta };
+  }
+
+  /** 将 slot 快照的 narrative 恢复到 data/games/<gameId>/narrative.log。 */
+  private restoreNarrative(slot: number, gameId: string): void {
+    const narrativeSrc = path.join(this.savesDir(), `slot_${slot}.narrative.log`);
+    if (!fs.existsSync(narrativeSrc)) return; // 没有快照则跳过
+
+    const targetDir = path.join(process.cwd(), 'data', 'games', gameId);
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.copyFileSync(narrativeSrc, path.join(targetDir, 'narrative.log'));
   }
 
   /**
    * Delete a save slot — removes DB row and file.
    */
   async deleteSave(slot: number): Promise<void> {
+    this.assertValidSlot(slot);
     this.saveRepo.delete(slot);
 
-    const savesDir = path.join(process.cwd(), 'data', 'saves');
+    const savesDir = this.savesDir();
     const dbPath = path.join(savesDir, `slot_${slot}.db`);
     const narrativePath = path.join(savesDir, `slot_${slot}.narrative.log`);
 

@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException, BadRequestException, ConflictExc
 import type Database from 'better-sqlite3';
 import { DB_INSTANCE } from '../db/tokens';
 import { NpcRepository } from '../db/repositories/npc.repository';
-import { NpcEngine, type NpcDialogueChunkEvent, type NpcMoodChangeEvent } from '../llm/npc-engine';
+import { NpcEngine } from '../llm/npc-engine';
 import { WorldRepository } from '../db/repositories/world.repository';
 import { PlayerRepository } from '../db/repositories/player.repository';
 import { GameEventsRepository } from '../db/repositories/game-events.repository';
@@ -125,7 +125,7 @@ export class NpcService {
   /**
    * 从数据库获取 NPC 记忆（非 raw，用于 API 返回）。
    */
-  getMemories(npcId: string): Array<{ content: string; importance: number; type: string }> {
+  getMemories(npcId: string): Array<{ id: number; content: string; turn: number; importance: number; type: string; created_at: string }> {
     const npc = this.npcRepo.findById(npcId);
     if (!npc) {
       throw new NotFoundException(`NPC not found: ${npcId}`);
@@ -133,15 +133,18 @@ export class NpcService {
     // Return structured memory
     const db = this.db;
     const stmt = db.prepare(
-      'SELECT content, importance, type FROM npc_memories WHERE npc_id = ? ORDER BY id DESC LIMIT 50',
+      'SELECT id, content, turn, importance, type, created_at FROM npc_memories WHERE npc_id = ? ORDER BY id DESC LIMIT 50',
     );
-    const rows = stmt.all(npcId) as Array<{ content: string; importance: number; type: string }>;
+    const rows = stmt.all(npcId) as Array<{ id: number; content: string; turn: number; importance: number; type: string; created_at: string }>;
     return rows.map(r => ({
+      id: r.id,
       content: r.content.startsWith('user||') || r.content.startsWith('assistant||')
         ? r.content.substring(r.content.indexOf('||') + 2)
         : r.content,
+      turn: r.turn,
       importance: r.importance,
       type: r.type,
+      created_at: r.created_at,
     }));
   }
 

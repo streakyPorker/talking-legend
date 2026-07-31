@@ -19,7 +19,7 @@ import { GM_NARRATIVE_USER_PARAMS } from '../prompts/schemas/gm/narrative.schema
 // ─── 事件类型 ──────────────────────────────────────────────
 
 export interface GMChunkEvent { type: 'chunk'; content: string }
-export interface GMDoneEvent { type: 'done'; turn: number; tokenEstimate: number; inputTokens?: number; outputTokens?: number }
+export interface GMDoneEvent { type: 'done'; turn: number; tokenEstimate: number; narrative?: string; inputTokens?: number; outputTokens?: number }
 export type GMStreamEvent = GMChunkEvent | GMDoneEvent;
 
 // ─── 服务 ──────────────────────────────────────────────────
@@ -36,99 +36,6 @@ export class GMEngine {
     private readonly narrativeService: NarrativeService,
     private readonly toolRegistry: ToolRegistry,
   ) {}
-
-  async *generate(
-    gameId: string,
-    action: string,
-    target: string | undefined,
-    turn: number,
-  ): AsyncIterable<GMStreamEvent> {
-    const startTime = Date.now();
-
-    // 1. 构建系统 prompt
-    let ctx: AssembledContext;
-    try {
-      this.logger.debug(`Building GM context for gameId=${gameId}`);
-      ctx = await this.contextProvider.buildGMContext(gameId, 180_000);
-      this.logger.debug(`Context built, tokenEstimate=${ctx.tokenEstimate}`);
-    } catch (err) {
-      // 上下文构建失败 → 降级
-      this.logger.warn(`Context build failed for gameId=${gameId}, action=${action}, using fallback`);
-      const fallback = this.fallbackNarrative(action);
-      yield { type: 'chunk', content: fallback };
-      yield { type: 'done', turn, tokenEstimate: 0 };
-      return;
-    }
-
-    // 2. 渲染用户 prompt
-    const userParams: Record<string, string> = {
-      playerAction: action,
-      target: target ?? '无',
-    };
-    const userPrompt = this.templateEngine.render(
-      'gm.narrative.user',
-      userParams,
-      GM_NARRATIVE_USER_PARAMS,
-    );
-    this.logger.debug(`User prompt rendered: ${userPrompt.slice(0, 200)}${userPrompt.length > 200 ? '...' : ''}`);
-    this.logger.log(`GM generate started: gameId=${gameId} action=${action} turn=${turn}`);
-
-    // 3. 流式 LLM 调用
-    let fullText = '';
-    let apiUsage: { inputTokens: number; outputTokens: number } | null = null;
-
-    try {
-      for await (const event of this.llmClient.stream({
-        model: this.llmClient.opusModel,
-        systemPrompt: ctx.systemPrompt,
-        userPrompt,
-        maxTokens: 8192,
-      })) {
-        if (event.type === 'chunk') {
-          fullText += event.content;
-          yield { type: 'chunk', content: event.content };
-        } else if (event.type === 'usage') {
-          apiUsage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
-        }
-      }
-    } catch (err) {
-      this.logger.error(`LLM stream error: ${err instanceof Error ? err.message : String(err)}`);
-      this.logger.warn(`Using fallback narrative for action=${action}`);
-      const fallback = this.fallbackNarrative(action);
-      fullText = fallback;
-      yield { type: 'chunk', content: fallback };
-    }
-
-    // 4. 同步日志
-    const latencyMs = Date.now() - startTime;
-    try {
-      this.llmLogRepo.insert({
-        gameId,
-        callType: 'gm_narrative',
-        model: this.llmClient.opusModel,
-        promptTokens: apiUsage?.inputTokens ?? ctx.tokenEstimate,
-        completionTokens: apiUsage?.outputTokens ?? Math.ceil(fullText.length / 2),
-        latencyMs,
-        costUsd: 0,
-      });
-    } catch {
-      /* 静默 — 日志记录失败不阻断流程 */
-    }
-
-    try {
-      this.narrativeService.append(gameId, turn, fullText);
-    } catch {
-      /* 静默 — 叙事持久化失败不阻断流程 */
-    }
-
-    // 5. done 事件
-    yield {
-      type: 'done',
-      turn,
-      tokenEstimate: ctx.tokenEstimate,
-      ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}),
-    };
-  }
 
   async *generateWithTools(
     gameId: string,
@@ -256,7 +163,7 @@ export class GMEngine {
     try { this.narrativeService.append(gameId, finalTurn, fullText); } catch { /* silent */ }
 
     this.logger.log(`GM generateWithTools done: turn=${finalTurn} tokenEstimate=${ctx.tokenEstimate}`);
-    yield { type: 'done', turn: finalTurn, tokenEstimate: ctx.tokenEstimate, ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}) };
+    yield { type: 'done', turn: finalTurn, tokenEstimate: ctx.tokenEstimate, narrative: fullText, ...(apiUsage ? { inputTokens: apiUsage.inputTokens, outputTokens: apiUsage.outputTokens } : {}) };
   }
 
   private fallbackNarrative(action: string): string {
